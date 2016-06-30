@@ -11,15 +11,25 @@ public class EditorFormulasWindow : EditorWindow {
 	Dictionary<MethodInfo, ParameterInfo[]> parametersDictionary;
 	Dictionary<MethodInfo, bool> toggleStateDictionary;
 
+	List<MethodInfo> searchResults = new List<MethodInfo>();
+
 	public GUIStyle foldout;
 	private bool initStyles = false;
 
 	private Vector2 scrollPos;
 
+	string searchText = string.Empty;
+
+	Vector2 windowSize = new Vector2(300, 400);
+
 	[MenuItem ("Window/Editor Formulas %#e")]
 	public static void DoWindow()
 	{
-		EditorWindow.GetWindow<EditorFormulasWindow>();
+		var window = EditorWindow.GetWindow<EditorFormulasWindow>("Editor Formulas");
+		var pos = window.position;
+		pos.width = window.windowSize.x;
+		pos.height = window.windowSize.y;
+		window.position = pos;
 	}
 
 	void OnEnable()
@@ -39,6 +49,7 @@ public class EditorFormulasWindow : EditorWindow {
 			parameterValuesDictionary.Add(method, new object[method.GetParameters().Length]);
 			toggleStateDictionary.Add(method, false);
 		}
+		FilterBySearchText(searchText);
 	}
 
 	void OnGUI()
@@ -48,11 +59,18 @@ public class EditorFormulasWindow : EditorWindow {
 			initStyles = true;
 		}
 
+		EditorGUI.BeginChangeCheck();
+		searchText = EditorGUILayout.TextField(searchText);
+		if(EditorGUI.EndChangeCheck())
+		{
+			FilterBySearchText(searchText);
+		}
+
 		scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 
-		for(int i=0; i<formulaMethods.Length; i++)
+		for(int i=0; i<searchResults.Count; i++)
 		{
-			var method = formulaMethods[i];
+			var method = searchResults[i];
 			if(method == null) { continue; }
 
 			var parameters = parametersDictionary[method];
@@ -60,8 +78,10 @@ public class EditorFormulasWindow : EditorWindow {
 
 			var niceName = ObjectNames.NicifyVariableName(method.Name);
 
+			GUILayout.BeginVertical(GUI.skin.box, GUILayout.MaxWidth(this.position.width));
+
 			GUI.enabled = parameters.Length == 0 || parameterValuesArray.All(x => x != null);
-			if(GUILayout.Button(niceName))
+			if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 10)))
 			{
 				method.Invoke(null, parameterValuesArray);
 			}
@@ -69,16 +89,13 @@ public class EditorFormulasWindow : EditorWindow {
 
 			if(parameters.Length > 0)
 			{
-				GUILayout.BeginHorizontal();
-				GUILayout.Space(15f);
-				GUILayout.BeginVertical();
 				//Draw parameter fields
 				for (int p=0; p<parameters.Length; p++) {
 					var parameter = parameters[p];
 					var parameterType = parameter.ParameterType;
+					var niceParameterName = ObjectNames.NicifyVariableName(parameter.Name);
 					var valueObj = parameterValuesArray[p];
 					GUILayout.BeginHorizontal();
-					GUILayout.Label(new GUIContent(parameter.Name, parameter.Name));//, GUILayout.Width(100));
 					object newValue = null;
 
 	//				if(parameterType == typeof(Object))
@@ -93,51 +110,54 @@ public class EditorFormulasWindow : EditorWindow {
 
 					EditorGUI.BeginChangeCheck();
 					if (parameterType == typeof(int)) {
-						newValue = EditorGUILayout.IntField(valueObj != null ? ((int) valueObj) : 0 );
+						newValue = EditorGUILayout.IntField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((int) valueObj) : 0 );
 					}
 					else if(parameterType == typeof(float))
 					{
-						newValue = EditorGUILayout.FloatField(valueObj != null ? ((float) valueObj) : 0f );
+						newValue = EditorGUILayout.FloatField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((float) valueObj) : 0f );
 					}
 					else if(parameterType == typeof(string))
 					{
-						newValue = EditorGUILayout.TextField(valueObj != null ? ((string) valueObj) : string.Empty );
+						newValue = EditorGUILayout.TextField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((string) valueObj) : string.Empty );
 					}
 					else if(parameterType == typeof(Rect))
 					{
-						newValue = EditorGUILayout.RectField(valueObj != null ? ((Rect) valueObj) : new Rect() );
+						newValue = EditorGUILayout.RectField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Rect) valueObj) : new Rect() );
 					}
 					//TODO: Don't do this, instead use RectOffset as a class
 					else if(parameterType == typeof(RectOffset))
 					{
 						//We use a Vector4Field for RectOffset type because there isn't 
 						var rectOffset = (RectOffset) valueObj;
-						var vec4 = EditorGUILayout.Vector4Field(string.Empty, valueObj != null ? new Vector4(rectOffset.left, rectOffset.right, rectOffset.top, rectOffset.bottom) : Vector4.zero );
+						var vec4 = EditorGUILayout.Vector4Field(niceParameterName, valueObj != null ? new Vector4(rectOffset.left, rectOffset.right, rectOffset.top, rectOffset.bottom) : Vector4.zero );
 						newValue = new RectOffset((int)vec4.x, (int)vec4.y, (int)vec4.z, (int)vec4.w);
 					}
 					else if(parameterType == typeof(Vector2))
 					{
-						newValue = EditorGUILayout.Vector2Field(string.Empty, valueObj != null ? ((Vector2) valueObj) : Vector2.zero );
+						var fieldWidth = EditorGUIUtility.fieldWidth;
+						EditorGUIUtility.fieldWidth = 1f;
+						newValue = EditorGUILayout.Vector2Field(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Vector2) valueObj) : Vector2.zero );
+						EditorGUIUtility.fieldWidth = fieldWidth;
 					}
 					else if(parameterType == typeof(Vector3))
 					{
-						newValue = EditorGUILayout.Vector3Field(string.Empty, valueObj != null ? ((Vector3) valueObj) : Vector3.zero );
+						newValue = EditorGUILayout.Vector3Field(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Vector3) valueObj) : Vector3.zero );
 					}
 					else if(parameterType == typeof(Vector4))
 					{
-						newValue = EditorGUILayout.Vector4Field(string.Empty, valueObj != null ? ((Vector4) valueObj) : Vector4.zero );
+						newValue = EditorGUILayout.Vector4Field(niceParameterName, valueObj != null ? ((Vector4) valueObj) : Vector4.zero );
 					}
 					else if(parameterType == typeof(Color))
 					{
-						newValue = EditorGUILayout.ColorField(valueObj != null ? ((Color) valueObj) : Color.white);
+						newValue = EditorGUILayout.ColorField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Color) valueObj) : Color.white);
 					}
 					else if(parameterType == typeof(Object))
 					{
-						newValue = EditorGUILayout.ObjectField(valueObj != null ? ((Object) valueObj) : null, parameterType, true);
+						newValue = EditorGUILayout.ObjectField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Object) valueObj) : null, parameterType, true);
 					}
 					else if(parameterType.IsEnum)
 					{
-						newValue = EditorGUILayout.EnumPopup(valueObj != null ? ((System.Enum)valueObj) : default(System.Enum));
+						newValue = EditorGUILayout.EnumPopup(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((System.Enum)valueObj) : default(System.Enum));
 					}
 					if(EditorGUI.EndChangeCheck())
 					{
@@ -145,11 +165,22 @@ public class EditorFormulasWindow : EditorWindow {
 					}
 					GUILayout.EndHorizontal();
 				}
-				GUILayout.EndVertical();
-				GUILayout.EndHorizontal();
 			}
+			GUILayout.EndVertical();
 		}
 
 		EditorGUILayout.EndScrollView();
+	}
+
+	void FilterBySearchText(string text)
+	{
+		searchResults.Clear();
+		searchResults.AddRange(formulaMethods);
+		//If trimmed search text is not empty
+		if(!string.IsNullOrEmpty(text.Trim()))
+		{
+			//Remove all methods whose name doesn't contain search text
+			searchResults.RemoveAll(x => !x.Name.ToLower().Contains(text.ToLower()));
+		}
 	}
 }

@@ -3,7 +3,7 @@ using UnityEditor;
 using System.IO;
 using System.Collections.Generic;
 
-public static class EditorFormulas {
+public static partial class EditorFormulas {
 
 	public static void LogActiveEditorWindow()
 	{
@@ -126,7 +126,7 @@ public static class EditorFormulas {
 	public static void TestFindAsset()
 	{
 		var asset = Selection.activeObject;
-		if(asset = null) { return; }
+		if(asset == null) { return; }
 		if(!AssetDatabase.Contains(asset))
 		{
 			return;
@@ -184,11 +184,6 @@ public static class EditorFormulas {
 		{
 			Debug.Log(Selection.activeObject.GetInstanceID());
 		}
-	}
-
-	public static void PrintOutMethodBody()
-	{
-
 	}
 
 	private static void SetBorder(GUIStyle style, object parameter)
