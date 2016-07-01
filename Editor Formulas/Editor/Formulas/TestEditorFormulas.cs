@@ -10,7 +10,7 @@ public static partial class EditorFormulas {
 		Debug.Log(string.Format("{0} of type {1}", EditorWindow.focusedWindow.titleContent.text, EditorWindow.focusedWindow.GetType().FullName));
 	}
 
-	public static void ShowAllAssemblies()
+	public static void ReportAllAssemblies()
 	{
 		var assemblies = System.AppDomain.CurrentDomain.GetAssemblies();
 		foreach(var assembly in assemblies) {
@@ -39,9 +39,16 @@ public static partial class EditorFormulas {
 		Selection.activeObject = GetEditorGUISkin();
 	}
 
-	public static void ReportAssetPathOfSelectedObject()
+	public static void ReportAssetPathsOfSelectedObjects()
 	{
-		Debug.Log(AssetDatabase.GetAssetPath (Selection.activeObject));
+		var selectedObjects = Selection.objects;
+		foreach(var obj in selectedObjects)
+		{
+			if(AssetDatabase.Contains(obj))
+			{
+				Debug.Log(AssetDatabase.GetAssetPath(obj));
+			}
+		}
 	}
 
 	public static void CopyEditorStyleToSelectedGUISkin(string styleName)

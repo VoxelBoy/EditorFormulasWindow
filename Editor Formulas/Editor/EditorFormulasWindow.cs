@@ -176,11 +176,40 @@ public class EditorFormulasWindow : EditorWindow {
 	{
 		searchResults.Clear();
 		searchResults.AddRange(formulaMethods);
-		//If trimmed search text is not empty
-		if(!string.IsNullOrEmpty(text.Trim()))
+
+		//If search text has multiple words, check each one and AND them
+		var words = text.Split(new char[] {' '}, System.StringSplitOptions.RemoveEmptyEntries);
+		if(words.Length == 0) { return; }
+
+		//If there's only one word, check against normal method name, which has no spaces in it
+		if(words.Length == 1)
 		{
+			searchResults.RemoveAll(x => 
+				!x.Name.ToLower ().Contains (text.Trim().ToLower ())
+			);
+			//
+			
+
 			//Remove all methods whose name doesn't contain search text
-			searchResults.RemoveAll(x => !x.Name.ToLower().Contains(text.ToLower()));
+		}
+		//If there are multiple words, check that each one is contained in the nicified method name
+		else
+		{
+			searchResults.RemoveAll(x => 
+				{
+					var niceMethodName = ObjectNames.NicifyVariableName(x.Name).ToLower();
+					bool allWordsContained = true;
+					foreach(var word in words)
+					{
+						if(!niceMethodName.Contains(word.ToLower()))
+						{
+							allWordsContained = false;
+							break;
+						}
+					}
+					return !allWordsContained;
+				}
+			);
 		}
 	}
 }
