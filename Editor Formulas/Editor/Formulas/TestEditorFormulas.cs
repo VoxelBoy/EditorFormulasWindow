@@ -18,25 +18,9 @@ public static partial class EditorFormulas {
 		}
 	}
 
-	public static void SaveEditorGUISkinToAssetDatabase()
-	{
-		var currentGUISkin = GetEditorGUISkin();
-
-		var newGUISkin = Object.Instantiate(currentGUISkin);
-		newGUISkin.hideFlags = HideFlags.None;
-
-		var assetPath = AssetDatabase.GenerateUniqueAssetPath("Assets/EditorGUISkin.guiskin");
-		CreateAndSaveAsset(newGUISkin, assetPath);
-	}
-
 	private static GUISkin GetEditorGUISkin()
 	{
 		return typeof(GUISkin).GetField("current", ReflectionHelper.fullBindingStatic).GetValue(null) as GUISkin;
-	}
-
-	public static void SelectEditorGUISkin()
-	{
-		Selection.activeObject = GetEditorGUISkin();
 	}
 
 	public static void ReportAssetPathsOfSelectedObjects()
@@ -182,14 +166,6 @@ public static partial class EditorFormulas {
 				System.GC.Collect();
 				Resources.UnloadUnusedAssets();
 			}
-		}
-	}
-
-	public static void ReportInstanceID()
-	{
-		if(Selection.activeObject != null)
-		{
-			Debug.Log(Selection.activeObject.GetInstanceID());
 		}
 	}
 
