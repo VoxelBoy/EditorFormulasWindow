@@ -1,26 +1,39 @@
 ﻿using UnityEngine;
 using UnityEditor;
-using System.Collections.Generic;
-using System.Reflection;
+using System;
+using System.IO;
+using System.Net;
 using System.Linq;
+using System.Reflection;
+using System.Collections.Generic;
 
 public class EditorFormulasWindow : EditorWindow {
 
-	MethodInfo[] formulaMethods;
 	Dictionary<MethodInfo, object[]> parameterValuesDictionary;
 	Dictionary<MethodInfo, ParameterInfo[]> parametersDictionary;
-	Dictionary<MethodInfo, bool> toggleStateDictionary;
 
-	List<MethodInfo> searchResults = new List<MethodInfo>();
+	List<FormulaData> searchResults = new List<FormulaData>();
+	List<FormulaData> formulasToDownload = new List<FormulaData>();
+	FormulaData formulaBeingDownloaded = null;
+	HttpWebResponse downloadFormulaResponse = null;
 
 	public GUIStyle foldout;
 	private bool initStyles = false;
 
 	private Vector2 scrollPos;
 
-	string searchText = string.Empty;
+	public string searchText = string.Empty;
 
 	Vector2 windowSize = new Vector2(300, 400);
+
+	FormulaDataStore formulaDataStore;
+
+	HttpWebRequest webRequest;
+
+	Texture2D downloadTexture;
+	GUIContent downloadButtonGUIContent;
+
+	HttpWebResponse getOnlineFormulasResponse = null;
 
 	[MenuItem ("Window/Editor Formulas %#e")]
 	public static void DoWindow()
@@ -34,22 +47,241 @@ public class EditorFormulasWindow : EditorWindow {
 
 	void OnEnable()
 	{
-		Refresh();
+		Debug.Log("On Enable");
+		formulaDataStore = FormulaDataStore.LoadFromAssetDatabaseOrCreate();
+
+		downloadTexture = Resources.Load<Texture2D>("downloadTexture");
+		downloadButtonGUIContent = new GUIContent(downloadTexture, "Download Formula");
+
+		EditorApplication.update += OnUpdate;
+
+		LoadLocalFormulas();
+
+		//Set up parameters
+		var usableFormulas = formulaDataStore.FormulaData.FindAll(x => x.methodInfo != null);
+		parametersDictionary = new Dictionary<MethodInfo, ParameterInfo[]>(usableFormulas.Count);
+		parameterValuesDictionary = new Dictionary<MethodInfo, object[]>(usableFormulas.Count);
+		foreach(var formula in usableFormulas)
+		{
+			var methodInfo = formula.methodInfo;
+			parametersDictionary.Add(methodInfo, methodInfo.GetParameters());
+			parameterValuesDictionary.Add(methodInfo, new object[methodInfo.GetParameters().Length]);
+		}
+
+		FilterBySearchText(searchText);
+
+		//When loading online formula data, go over the local formula data and update the download URLs, in case someone
+		//downloaded a formula by hand and the downloadURL wasn't set
+
+		//TODO: Load online formula data
+		GetOnlineFormulas();
 	}
 
-	void Refresh()
+	void OnDisable()
 	{
-		formulaMethods = ReflectionHelper.GetTypeInfo("EditorFormulas", "Assembly-CSharp-Editor").type.GetMethods(BindingFlags.Static | BindingFlags.Public);
-		parametersDictionary = new Dictionary<MethodInfo, ParameterInfo[]>(formulaMethods.Length);
-		parameterValuesDictionary = new Dictionary<MethodInfo, object[]>(formulaMethods.Length);
-		toggleStateDictionary = new Dictionary<MethodInfo, bool>(formulaMethods.Length);
-		foreach(var method in formulaMethods)
+		Debug.Log("On Disable");
+		EditorApplication.update -= OnUpdate;
+	}
+
+	void LoadLocalFormulas()
+	{
+		var assetsDirectory = new DirectoryInfo(Application.dataPath);
+		var editorFormulasDirectory = new DirectoryInfo(Path.Combine(assetsDirectory.Parent.FullName, EditorFormulasConstants.formulasFolderUnityPath));
+		var files = new List<FileInfo>(editorFormulasDirectory.GetFiles());
+		//Remove all files that don't have a .cs extension
+		files.RemoveAll(x => ! x.Extension.Equals(".cs", StringComparison.InvariantCultureIgnoreCase));
+
+		foreach(var file in files)
 		{
-			parametersDictionary.Add(method, method.GetParameters());
-			parameterValuesDictionary.Add(method, new object[method.GetParameters().Length]);
-			toggleStateDictionary.Add(method, false);
+			var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.FullName);
+			var formula = formulaDataStore.FormulaData.Find(x => x.name == fileNameWithoutExtension);
+			var methodInfo = EditorFormulasUtils.GetFormulaMethod(fileNameWithoutExtension);
+
+			//Process only if valid method was found
+			if(methodInfo != null)
+			{
+				//If formula doesn't exist in formulaDataStore
+				if(formula == null)
+				{
+					formula = new FormulaData();
+					formula.name = fileNameWithoutExtension;
+					formula.localFilePath = EditorFormulasConstants.formulasFolderUnityPath + file.Name;
+					formulaDataStore.FormulaData.Add(formula);
+					EditorUtility.SetDirty(formulaDataStore);
+				}
+				//Update formula's methodInfo reference
+				formula.methodInfo = methodInfo;
+			}
 		}
-		FilterBySearchText(searchText);
+	}
+
+	//TODO: Offer to update each formula based on download time
+	void GetOnlineFormulas()
+	{
+		if(webRequest != null)
+		{
+			Debug.Log("Another web request is already in progress");
+			return;
+		}
+		webRequest = WebRequest.Create(new Uri(EditorFormulasConstants.formulasRepoContentsURL)) as HttpWebRequest;
+		webRequest.UserAgent = "EditorFormulas";
+		webRequest.Method = "GET";
+		webRequest.IfModifiedSince = formulaDataStore.LastUpdateTime;
+
+		webRequest.BeginGetResponse(HandleAsync_GetOnlineFormulas, null);
+	}
+
+	void HandleAsync_GetOnlineFormulas (IAsyncResult ar)
+	{
+		if(!ar.IsCompleted)
+		{
+			return;
+		}
+
+		try
+		{
+			getOnlineFormulasResponse = webRequest.EndGetResponse(ar) as HttpWebResponse;
+			webRequest = null;
+		}
+		catch (WebException ex)
+		{
+			webRequest = null;
+			//TODO: We could get Name Resolution Failure if there's no connection, how to handle?
+		}
+	}
+
+	void HandleAsync_DownloadFormula (IAsyncResult ar)
+	{
+		if(!ar.IsCompleted)
+		{
+			return;
+		}
+
+		try
+		{
+			downloadFormulaResponse = webRequest.EndGetResponse(ar) as HttpWebResponse;
+			webRequest = null;
+		}
+		catch (WebException ex)
+		{
+			webRequest = null;
+			//TODO: We could get Name Resolution Failure if there's no connection, how to handle?
+		}
+	}
+
+	private static string DateTimeToHeaderTimeString(DateTime dateTime)
+	{
+		var headerTimeString = string.Format("{0} {1} GMT", dateTime.ToLongDateString(), dateTime.ToLongTimeString());
+		return headerTimeString;
+	}
+
+	void OnUpdate()
+	{
+		if(getOnlineFormulasResponse != null)
+		{
+			//OK
+			if(getOnlineFormulasResponse.StatusCode == HttpStatusCode.OK)
+			{
+				var responseStreamString = new StreamReader(getOnlineFormulasResponse.GetResponseStream()).ReadToEnd();
+				var repositoryContentsList = MiniJSON.Json.Deserialize(responseStreamString) as List<object>;
+				responseStreamString = string.Empty;
+				foreach(Dictionary<string,object> content in repositoryContentsList)
+				{
+					var downloadURL = content["download_url"] as string;
+					var extension = Path.GetExtension(downloadURL);
+					//If it's a .cs file
+					if(string.Equals(extension, ".cs", StringComparison.InvariantCultureIgnoreCase))
+					{
+						var fileName = Path.GetFileName(downloadURL);
+						var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(downloadURL);
+						//Check to see if it exists in formulaDataStore
+						var formula = formulaDataStore.FormulaData.Find(x => x.name == fileNameWithoutExtension);
+						if(formula == null)
+						{
+							formula = new FormulaData();
+							formula.name = fileNameWithoutExtension;
+							formula.localFilePath = EditorFormulasConstants.formulasFolderUnityPath + fileName;
+							formula.downloadURL = downloadURL;
+							formulaDataStore.FormulaData.Add(formula);
+						}
+						else
+						{
+							//If download URL doesn't match (can happen if file was copied to project, instead of downloaded)
+							if(! string.Equals(formula.downloadURL, downloadURL))
+							{
+								//Update download url
+								formula.downloadURL = downloadURL;
+							}
+						}
+					}
+				}
+
+				//Update lastUpdateTime and dirty the formulaDataStore, then re-search and repaint
+				formulaDataStore.lastUpdateTimeBinary = DateTime.UtcNow.ToBinary();
+				EditorUtility.SetDirty(formulaDataStore);
+				FilterBySearchText(searchText);
+				this.Repaint();
+			}
+			//Not modified
+			else if(getOnlineFormulasResponse.StatusCode == HttpStatusCode.NotModified)
+			{
+
+			}
+
+			getOnlineFormulasResponse.Close();
+			getOnlineFormulasResponse = null;
+		}
+
+		if(downloadFormulaResponse != null)
+		{
+			if(downloadFormulaResponse.StatusCode == HttpStatusCode.OK)
+			{
+				var responseStreamString = new StreamReader(downloadFormulaResponse.GetResponseStream()).ReadToEnd();
+				var fi = new FileInfo(formulaBeingDownloaded.localFilePath);
+				// Delete the file if it exists.
+				if (fi.Exists) 
+				{
+					fi.Delete();
+				}
+				var bytes = System.Text.Encoding.Default.GetBytes(responseStreamString);
+				using(var fs = fi.Create())
+				{
+					fs.Write(bytes, 0, bytes.Length);
+					fs.Flush();
+					fs.Close();
+				}
+				formulaBeingDownloaded.downloadTimeUTCBinary = DateTime.UtcNow.ToBinary();
+				EditorUtility.SetDirty(formulaDataStore);
+				AssetDatabase.Refresh();
+			}
+			//Not modified
+			else if(downloadFormulaResponse.StatusCode == HttpStatusCode.NotModified)
+			{
+
+			}
+
+			formulasToDownload.Remove(formulaBeingDownloaded);
+			formulaBeingDownloaded = null;
+
+			downloadFormulaResponse.Close();
+			downloadFormulaResponse = null;
+		}
+
+		//If there are formulas to be downloaded
+		if(formulasToDownload.Count > 0)
+		{
+			//And there isn't already a WebRequest in progress
+			if(webRequest == null)
+			{
+				formulaBeingDownloaded = formulasToDownload[formulasToDownload.Count - 1];
+				var downloadURL = formulaBeingDownloaded.downloadURL;
+				webRequest = WebRequest.Create(new Uri(downloadURL)) as HttpWebRequest;
+				webRequest.UserAgent = "EditorFormulas";
+				webRequest.Method = "GET";
+				webRequest.IfModifiedSince = formulaBeingDownloaded.DownloadTimeUTC;
+				webRequest.BeginGetResponse(HandleAsync_DownloadFormula, null);
+			}				
+		}
 	}
 
 	void OnGUI()
@@ -68,114 +300,171 @@ public class EditorFormulasWindow : EditorWindow {
 
 		scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
 
+		//Draw search results
 		for(int i=0; i<searchResults.Count; i++)
 		{
-			var method = searchResults[i];
-			if(method == null) { continue; }
+			var formula = searchResults[i];
 
-			var parameters = parametersDictionary[method];
-			var parameterValuesArray = parameterValuesDictionary[method];
-
-			var niceName = ObjectNames.NicifyVariableName(method.Name);
-
-			GUILayout.BeginVertical(GUI.skin.box, GUILayout.MaxWidth(this.position.width));
-
-			GUI.enabled = parameters.Length == 0 || parameterValuesArray.All(x => x != null);
-			if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 10)))
+			if(formula.IsUsable)
 			{
-				method.Invoke(null, parameterValuesArray);
+				DrawUsableFormula(formula);
 			}
-			GUI.enabled = true;
-
-			if(parameters.Length > 0)
+			else
 			{
-				//Draw parameter fields
-				for (int p=0; p<parameters.Length; p++) {
-					var parameter = parameters[p];
-					var parameterType = parameter.ParameterType;
-					var niceParameterName = ObjectNames.NicifyVariableName(parameter.Name);
-					var valueObj = parameterValuesArray[p];
-					GUILayout.BeginHorizontal();
-					object newValue = null;
-
-	//				if(parameterType == typeof(Object))
-	//				{
-	//					newValue = EditorGUILayout.ObjectField(valueObj != null ? ((Object) valueObj) : null, parameterType, true);
-	//				}
-	//				else if(parameterType.IsClass && parameterType.IsSerializable)
-	//				{
-	//					var fieldInfos = parameterType.GetFields(BindingFlags.Instance | BindingFlags.Public);
-	//					//TODO: Draw a field for each public instance field of class
-	//				}
-
-					EditorGUI.BeginChangeCheck();
-					if (parameterType == typeof(int)) {
-						newValue = EditorGUILayout.IntField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((int) valueObj) : 0 );
-					}
-					else if(parameterType == typeof(float))
-					{
-						newValue = EditorGUILayout.FloatField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((float) valueObj) : 0f );
-					}
-					else if(parameterType == typeof(string))
-					{
-						newValue = EditorGUILayout.TextField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((string) valueObj) : string.Empty );
-					}
-					else if(parameterType == typeof(Rect))
-					{
-						newValue = EditorGUILayout.RectField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Rect) valueObj) : new Rect() );
-					}
-					//TODO: Don't do this, instead use RectOffset as a class
-					else if(parameterType == typeof(RectOffset))
-					{
-						//We use a Vector4Field for RectOffset type because there isn't 
-						var rectOffset = (RectOffset) valueObj;
-						var vec4 = EditorGUILayout.Vector4Field(niceParameterName, valueObj != null ? new Vector4(rectOffset.left, rectOffset.right, rectOffset.top, rectOffset.bottom) : Vector4.zero );
-						newValue = new RectOffset((int)vec4.x, (int)vec4.y, (int)vec4.z, (int)vec4.w);
-					}
-					else if(parameterType == typeof(Vector2))
-					{
-						var fieldWidth = EditorGUIUtility.fieldWidth;
-						EditorGUIUtility.fieldWidth = 1f;
-						newValue = EditorGUILayout.Vector2Field(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Vector2) valueObj) : Vector2.zero );
-						EditorGUIUtility.fieldWidth = fieldWidth;
-					}
-					else if(parameterType == typeof(Vector3))
-					{
-						newValue = EditorGUILayout.Vector3Field(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Vector3) valueObj) : Vector3.zero );
-					}
-					else if(parameterType == typeof(Vector4))
-					{
-						newValue = EditorGUILayout.Vector4Field(niceParameterName, valueObj != null ? ((Vector4) valueObj) : Vector4.zero );
-					}
-					else if(parameterType == typeof(Color))
-					{
-						newValue = EditorGUILayout.ColorField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Color) valueObj) : Color.white);
-					}
-					else if(parameterType == typeof(Object))
-					{
-						newValue = EditorGUILayout.ObjectField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Object) valueObj) : null, parameterType, true);
-					}
-					else if(parameterType.IsEnum)
-					{
-						newValue = EditorGUILayout.EnumPopup(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((System.Enum)valueObj) : default(System.Enum));
-					}
-					if(EditorGUI.EndChangeCheck())
-					{
-						parameterValuesArray[p] = newValue;
-					}
-					GUILayout.EndHorizontal();
-				}
+				DrawOnlineFormula(formula);
 			}
-			GUILayout.EndVertical();
 		}
 
 		EditorGUILayout.EndScrollView();
 	}
 
+	void DrawUsableFormula(FormulaData formula)
+	{
+		var niceName = ObjectNames.NicifyVariableName(formula.name);
+		var method = formula.methodInfo;
+
+		if(method == null)
+		{
+			return;
+		}
+
+		var parameters = parametersDictionary[method];
+		var parameterValuesArray = parameterValuesDictionary[method];
+
+		if(parameters.Length > 0)
+		{
+			GUILayout.BeginVertical(GUI.skin.box, GUILayout.MaxWidth(this.position.width));
+		}
+
+		//Button is only enabled if parameters have been initialized
+		GUI.enabled = parameters.Length == 0 || parameterValuesArray.All(x => x != null);
+		if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 10)))
+		{
+			method.Invoke(null, parameterValuesArray);
+		}
+		GUI.enabled = true;
+
+		if(parameters.Length > 0)
+		{
+			//Draw parameter fields
+			for (int p=0; p<parameters.Length; p++) {
+				var parameter = parameters[p];
+				var parameterType = parameter.ParameterType;
+				var niceParameterName = ObjectNames.NicifyVariableName(parameter.Name);
+				var valueObj = parameterValuesArray[p];
+				GUILayout.BeginHorizontal();
+				object newValue = null;
+
+				//				if(parameterType == typeof(Object))
+				//				{
+				//					newValue = EditorGUILayout.ObjectField(valueObj != null ? ((Object) valueObj) : null, parameterType, true);
+				//				}
+				//				else if(parameterType.IsClass && parameterType.IsSerializable)
+				//				{
+				//					var fieldInfos = parameterType.GetFields(BindingFlags.Instance | BindingFlags.Public);
+				//					//TODO: Draw a field for each public instance field of class
+				//				}
+
+				EditorGUI.BeginChangeCheck();
+				if (parameterType == typeof(int)) {
+					newValue = EditorGUILayout.IntField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((int) valueObj) : 0 );
+				}
+				else if(parameterType == typeof(float))
+				{
+					newValue = EditorGUILayout.FloatField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((float) valueObj) : 0f );
+				}
+				else if(parameterType == typeof(string))
+				{
+					newValue = EditorGUILayout.TextField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((string) valueObj) : string.Empty );
+				}
+				else if(parameterType == typeof(Rect))
+				{
+					newValue = EditorGUILayout.RectField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Rect) valueObj) : new Rect() );
+				}
+				//TODO: Don't do this, instead use RectOffset as a class
+				else if(parameterType == typeof(RectOffset))
+				{
+					//We use a Vector4Field for RectOffset type because there isn't 
+					var rectOffset = (RectOffset) valueObj;
+					var vec4 = EditorGUILayout.Vector4Field(niceParameterName, valueObj != null ? new Vector4(rectOffset.left, rectOffset.right, rectOffset.top, rectOffset.bottom) : Vector4.zero );
+					newValue = new RectOffset((int)vec4.x, (int)vec4.y, (int)vec4.z, (int)vec4.w);
+				}
+				else if(parameterType == typeof(Vector2))
+				{
+					var fieldWidth = EditorGUIUtility.fieldWidth;
+					EditorGUIUtility.fieldWidth = 1f;
+					newValue = EditorGUILayout.Vector2Field(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Vector2) valueObj) : Vector2.zero );
+					EditorGUIUtility.fieldWidth = fieldWidth;
+				}
+				else if(parameterType == typeof(Vector3))
+				{
+					newValue = EditorGUILayout.Vector3Field(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Vector3) valueObj) : Vector3.zero );
+				}
+				else if(parameterType == typeof(Vector4))
+				{
+					newValue = EditorGUILayout.Vector4Field(niceParameterName, valueObj != null ? ((Vector4) valueObj) : Vector4.zero );
+				}
+				else if(parameterType == typeof(Color))
+				{
+					newValue = EditorGUILayout.ColorField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((Color) valueObj) : Color.white);
+				}
+				else if(parameterType == typeof(UnityEngine.Object))
+				{
+					newValue = EditorGUILayout.ObjectField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((UnityEngine.Object) valueObj) : null, parameterType, true);
+				}
+				else if(parameterType.IsEnum)
+				{
+					newValue = EditorGUILayout.EnumPopup(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((System.Enum)valueObj) : default(System.Enum));
+				}
+				if(EditorGUI.EndChangeCheck())
+				{
+					parameterValuesArray[p] = newValue;
+				}
+				GUILayout.EndHorizontal();
+			}
+		}
+
+		if(parameters.Length > 0)
+		{
+			GUILayout.EndVertical();
+		}
+	}
+
+	void DrawOnlineFormula(FormulaData formula)
+	{
+		var niceName = ObjectNames.NicifyVariableName(formula.name);
+		//Button is disabled until formula is downloaded
+		var guiEnabled = GUI.enabled;
+		GUI.enabled = false;
+		GUILayout.BeginHorizontal();
+		GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 30));
+		GUI.enabled = guiEnabled;
+		if(GUILayout.Button(downloadButtonGUIContent, GUILayout.MaxWidth(20)))
+		{
+			DownloadFormula(formula);
+		}
+
+		GUILayout.EndHorizontal();
+	}
+
+	void DownloadFormula(FormulaData formula)
+	{
+		if(formulasToDownload.Contains(formula))
+		{
+			return;
+		}
+		formulasToDownload.Add(formula);
+	}
+
 	void FilterBySearchText(string text)
 	{
 		searchResults.Clear();
-		searchResults.AddRange(formulaMethods);
+		searchResults.AddRange(formulaDataStore.FormulaData);
+
+		if(string.IsNullOrEmpty(text.Trim()))
+		{
+			return;
+		}
 
 		//If search text has multiple words, check each one and AND them
 		var words = text.Split(new char[] {' '}, System.StringSplitOptions.RemoveEmptyEntries);
@@ -184,20 +473,17 @@ public class EditorFormulasWindow : EditorWindow {
 		//If there's only one word, check against normal method name, which has no spaces in it
 		if(words.Length == 1)
 		{
-			searchResults.RemoveAll(x => 
-				!x.Name.ToLower ().Contains (text.Trim().ToLower ())
-			);
-			//
-			
-
 			//Remove all methods whose name doesn't contain search text
+			searchResults.RemoveAll(x => 
+				!x.name.ToLower ().Contains (text.Trim().ToLower ())
+			);
 		}
 		//If there are multiple words, check that each one is contained in the nicified method name
 		else
 		{
 			searchResults.RemoveAll(x => 
 				{
-					var niceMethodName = ObjectNames.NicifyVariableName(x.Name).ToLower();
+					var niceMethodName = ObjectNames.NicifyVariableName(x.name).ToLower();
 					bool allWordsContained = true;
 					foreach(var word in words)
 					{
@@ -211,5 +497,12 @@ public class EditorFormulasWindow : EditorWindow {
 				}
 			);
 		}
+
+		//If there isn't already a webrequest happening, create one to update formulas from web
+		if(webRequest != null)
+		{
+			//TODO
+		}
 	}
+
 }
