@@ -70,10 +70,6 @@ public class EditorFormulasWindow : EditorWindow {
 
 		FilterBySearchText(searchText);
 
-		//When loading online formula data, go over the local formula data and update the download URLs, in case someone
-		//downloaded a formula by hand and the downloadURL wasn't set
-
-		//TODO: Load online formula data
 		GetOnlineFormulas();
 	}
 
@@ -167,12 +163,6 @@ public class EditorFormulasWindow : EditorWindow {
 			webRequest = null;
 			//TODO: We could get Name Resolution Failure if there's no connection, how to handle?
 		}
-	}
-
-	private static string DateTimeToHeaderTimeString(DateTime dateTime)
-	{
-		var headerTimeString = string.Format("{0} {1} GMT", dateTime.ToLongDateString(), dateTime.ToLongTimeString());
-		return headerTimeString;
 	}
 
 	void OnUpdate()
