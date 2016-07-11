@@ -4,37 +4,40 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 
-public class FormulaDataStore : ScriptableObject {
+namespace EditorFormulas 
+{
+	public class FormulaDataStore : ScriptableObject {
 
-	public List<FormulaData> FormulaData;
-	public long lastUpdateTimeBinary;
-	public DateTime LastUpdateTime
-	{
-		get
+		public List<FormulaData> FormulaData;
+		public long lastUpdateTimeBinary;
+		public DateTime LastUpdateTime
 		{
-			return DateTime.FromBinary(lastUpdateTimeBinary);
+			get
+			{
+				return DateTime.FromBinary(lastUpdateTimeBinary);
+			}
 		}
-	}
 
-	public static FormulaDataStore LoadFromAssetDatabaseOrCreate()
-	{
-		var store = AssetDatabase.LoadAssetAtPath<FormulaDataStore>(EditorFormulasConstants.assetPath);
-		if(store == null)
+		public static FormulaDataStore LoadFromAssetDatabaseOrCreate()
 		{
-			store = ScriptableObject.CreateInstance<FormulaDataStore>();
+			var store = AssetDatabase.LoadAssetAtPath<FormulaDataStore>(Constants.assetPath);
+			if(store == null)
+			{
+				store = ScriptableObject.CreateInstance<FormulaDataStore>();
 
-			AssetDatabase.CreateAsset(store, EditorFormulasConstants.assetPath);
-			AssetDatabase.SaveAssets();
-			AssetDatabase.Refresh();
+				AssetDatabase.CreateAsset(store, Constants.assetPath);
+				AssetDatabase.SaveAssets();
+				AssetDatabase.Refresh();
+			}
+			return store;
 		}
-		return store;
-	}
 
-	void OnEnable()
-	{
-		if(FormulaData == null)
+		void OnEnable()
 		{
-			FormulaData = new List<FormulaData>();
+			if(FormulaData == null)
+			{
+				FormulaData = new List<FormulaData>();
+			}
 		}
 	}
 }

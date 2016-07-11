@@ -1,26 +1,27 @@
 ﻿using System;
 using System.Reflection;
 
-[System.Serializable]
-public class FormulaData
+namespace EditorFormulas 
 {
-	//Should match method info name
-	public string name;
-	public string downloadURL;
-	public string localFilePath;
-	public bool IsUsable
+	[System.Serializable]
+	public class FormulaData
 	{
-		get { return methodInfo != null; }
-	}
-	//Only valid for downloaded formulas
-	public MethodInfo methodInfo;
-	public long downloadTimeUTCBinary;
-
-	public DateTime DownloadTimeUTC
-	{
-		get
+		//Should match method info name
+		public string name;
+		public string downloadURL;
+		public string localFilePath;
+		public bool IsUsable
 		{
-			return DateTime.FromBinary(downloadTimeUTCBinary);
+			get { return methodInfo != null; }
 		}
+
+		public long downloadTimeUTCBinary;
+
+		[System.NonSerialized]
+		public MethodInfo methodInfo;
+		[System.NonSerialized]
+		public bool updateAvailable = false;
+
+		public long updateCheckTimeUTCBinary;
 	}
 }

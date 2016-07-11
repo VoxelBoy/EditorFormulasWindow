@@ -1,14 +1,17 @@
 ﻿using UnityEngine;
 using UnityEditor;
 
-public static partial class EditorFormulas {
+namespace EditorFormulas
+{
+	public static partial class Formulas {
 
-	public static void ReportInstanceID()
-	{
-		if(Selection.activeObject != null)
+		public static void ReportInstanceID()
 		{
-			Debug.Log(Selection.activeObject.GetInstanceID());
+			if(Selection.activeObject != null)
+			{
+				Debug.Log(Selection.activeObject.GetInstanceID());
+			}
 		}
-	}
 
+	}
 }

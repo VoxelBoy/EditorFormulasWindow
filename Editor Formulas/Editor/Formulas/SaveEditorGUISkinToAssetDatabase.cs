@@ -1,20 +1,23 @@
 ﻿using UnityEngine;
 using UnityEditor;
 
-public static partial class EditorFormulas {
+namespace EditorFormulas
+{
+	public static partial class Formulas {
 
-	public static void SaveEditorGUISkinToAssetDatabase()
-	{
-		var currentGUISkin = GetEditorGUISkin();
+		public static void SaveEditorGUISkinToAssetDatabase()
+		{
+			var currentGUISkin = GetEditorGUISkin();
 
-		var newGUISkin = Object.Instantiate(currentGUISkin);
-		newGUISkin.hideFlags = HideFlags.None;
+			var newGUISkin = Object.Instantiate(currentGUISkin);
+			newGUISkin.hideFlags = HideFlags.None;
 
-		var assetPath = AssetDatabase.GenerateUniqueAssetPath("Assets/EditorGUISkin.guiskin");
+			var assetPath = AssetDatabase.GenerateUniqueAssetPath("Assets/EditorGUISkin.guiskin");
 
-		AssetDatabase.CreateAsset (newGUISkin, assetPath);
-		AssetDatabase.SaveAssets ();
-		AssetDatabase.Refresh();
+			AssetDatabase.CreateAsset (newGUISkin, assetPath);
+			AssetDatabase.SaveAssets ();
+			AssetDatabase.Refresh();
+		}
+
 	}
-
 }
