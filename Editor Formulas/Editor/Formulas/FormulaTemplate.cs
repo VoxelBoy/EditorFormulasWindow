@@ -1,6 +1,9 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEditor;
 
-public static partial class EditorFormulas {
+namespace EditorFormulas
+{
+	public static partial class Formulas {
 
+	}
 }

@@ -10,11 +10,18 @@ namespace EditorFormulas
 
 		public List<FormulaData> FormulaData;
 		public long lastUpdateTimeBinary;
+
+		public string lastGetOnlineFormulasResponse;
+
 		public DateTime LastUpdateTime
 		{
 			get
 			{
 				return DateTime.FromBinary(lastUpdateTimeBinary);
+			}
+			set
+			{
+				lastUpdateTimeBinary = value.ToBinary();
 			}
 		}
 

@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System;
+using System.IO;
 using System.Collections;
 using System.Reflection;
 
@@ -44,6 +45,19 @@ namespace EditorFormulas
 			}
 			var method = editorFormulasType.GetMethod(name, BindingFlags.Static | BindingFlags.Public);
 			return method;
+		}
+
+		public static string GetFullPathFromAssetsPath(string assetsPath)
+		{
+			var assetsDirectory = new DirectoryInfo(Application.dataPath);
+			var fullPath = new DirectoryInfo(Path.Combine(assetsDirectory.Parent.FullName, assetsPath)).FullName;
+			return fullPath;
+		}
+
+		public static string ConvertFormulaDownloadURLToGitHubURL(string downloadURL)
+		{
+			//TODO: implement
+			return downloadURL;
 		}
 	}
 }

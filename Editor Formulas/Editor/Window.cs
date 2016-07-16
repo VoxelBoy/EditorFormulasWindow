@@ -2,7 +2,6 @@
 using UnityEditor;
 using System;
 using System.IO;
-using System.Net;
 using System.Linq;
 using System.Reflection;
 using System.Collections.Generic;
@@ -14,13 +13,15 @@ namespace EditorFormulas
 		[SerializeField]
 		private Texture2D downloadTexture;
 
+		[SerializeField]
+		private Texture2D optionsTexture;
+
+		WebHelper webHelper;
+
 		Dictionary<MethodInfo, object[]> parameterValuesDictionary;
 		Dictionary<MethodInfo, ParameterInfo[]> parametersDictionary;
 
 		List<FormulaData> searchResults = new List<FormulaData>();
-		List<FormulaData> formulasToDownload = new List<FormulaData>();
-		FormulaData formulaBeingDownloaded = null;
-		HttpWebResponse downloadFormulaResponse = null;
 
 		public GUIStyle foldout;
 		private bool initStyles = false;
@@ -33,11 +34,13 @@ namespace EditorFormulas
 
 		FormulaDataStore formulaDataStore;
 
-		HttpWebRequest webRequest;
-
 		GUIContent downloadButtonGUIContent;
+		GUIContent optionsButtonGUIContent;
+		GUIContent[] waitSpinGUIContents;
 
-		HttpWebResponse getOnlineFormulasResponse = null;
+		bool doRepaint = false;
+
+		private static Window instance;
 
 		[MenuItem ("Window/Editor Formulas %#e")]
 		public static void DoWindow()
@@ -51,17 +54,28 @@ namespace EditorFormulas
 
 		void OnEnable()
 		{
-			Debug.Log("On Enable");
+			instance = this;
+			//Can be used to get the path to this class' path and use relative paths if necessary
+			//Debug.Log("Path: " + AssetDatabase.GetAssetPath(MonoScript.FromScriptableObject(this)));
 			formulaDataStore = FormulaDataStore.LoadFromAssetDatabaseOrCreate();
 
-			downloadButtonGUIContent = new GUIContent(downloadTexture, "Download Formula");
+			webHelper = ScriptableObject.CreateInstance<WebHelper>();
+			webHelper.Init(formulaDataStore);
+			webHelper.FormulaDataUpdated += FormulaDataUpdated;
 
-			EditorApplication.update += OnUpdate;
+			downloadButtonGUIContent = new GUIContent(downloadTexture, "Download Formula");
+			optionsButtonGUIContent = new GUIContent(optionsTexture, "Options");
+
+			waitSpinGUIContents = new GUIContent[12];
+			for(int i=0; i<12; i++)
+			{
+				waitSpinGUIContents[i] = new GUIContent(EditorGUIUtility.FindTexture("WaitSpin" + i.ToString("00")));
+			}
 
 			LoadLocalFormulas();
 
 			//Set up parameters
-			var usableFormulas = formulaDataStore.FormulaData.FindAll(x => x.methodInfo != null);
+			var usableFormulas = formulaDataStore.FormulaData.FindAll(x => x.IsUsable);
 			parametersDictionary = new Dictionary<MethodInfo, ParameterInfo[]>(usableFormulas.Count);
 			parameterValuesDictionary = new Dictionary<MethodInfo, object[]>(usableFormulas.Count);
 			foreach(var formula in usableFormulas)
@@ -73,19 +87,25 @@ namespace EditorFormulas
 
 			FilterBySearchText(searchText);
 
-			GetOnlineFormulas();
+			webHelper.GetOnlineFormulas();
+
+			EditorApplication.update += OnUpdate;
 		}
 
 		void OnDisable()
 		{
-			Debug.Log("On Disable");
+			if(webHelper != null)
+			{
+				UnityEngine.Object.DestroyImmediate(webHelper);
+				webHelper.FormulaDataUpdated -= FormulaDataUpdated;
+			}
 			EditorApplication.update -= OnUpdate;
+			instance = null;
 		}
 
 		void LoadLocalFormulas()
 		{
-			var assetsDirectory = new DirectoryInfo(Application.dataPath);
-			var editorFormulasDirectory = new DirectoryInfo(Path.Combine(assetsDirectory.Parent.FullName, Constants.formulasFolderUnityPath));
+			var editorFormulasDirectory = new DirectoryInfo(Utils.GetFullPathFromAssetsPath(Constants.formulasFolderUnityPath));
 			var files = new List<FileInfo>(editorFormulasDirectory.GetFiles());
 			//Remove all files that don't have a .cs extension
 			files.RemoveAll(x => ! x.Extension.Equals(".cs", StringComparison.InvariantCultureIgnoreCase));
@@ -104,7 +124,8 @@ namespace EditorFormulas
 					{
 						formula = new FormulaData();
 						formula.name = fileNameWithoutExtension;
-						formula.localFilePath = Constants.formulasFolderUnityPath + file.Name;
+						formula.projectFilePath = Constants.formulasFolderUnityPath + file.Name;
+						formula.localFileExists = new FileInfo(Utils.GetFullPathFromAssetsPath(formula.projectFilePath)).Exists;
 						formulaDataStore.FormulaData.Add(formula);
 						EditorUtility.SetDirty(formulaDataStore);
 					}
@@ -117,9 +138,10 @@ namespace EditorFormulas
 			//and also don't have downloadURLs, remove them
 			for(int i=formulaDataStore.FormulaData.Count-1; i>=0; i--)
 			{
-				var formula = formulaDataStore.FormulaData[i];
-				var fi = new FileInfo(formula.localFilePath);
-				if(! fi.Exists && string.IsNullOrEmpty(formula.downloadURL))
+				var formulaData = formulaDataStore.FormulaData[i];
+				var fullPath = Utils.GetFullPathFromAssetsPath(formulaData.projectFilePath);
+				var fi = new FileInfo(fullPath);
+				if(!fi.Exists && string.IsNullOrEmpty(formulaData.downloadURL))
 				{
 					formulaDataStore.FormulaData.RemoveAt(i);
 					EditorUtility.SetDirty(formulaDataStore);
@@ -127,166 +149,26 @@ namespace EditorFormulas
 			}
 		}
 
-		//TODO: Offer to update each formula based on download time
-		void GetOnlineFormulas()
-		{
-			if(webRequest != null)
+		[UnityEditor.Callbacks.DidReloadScripts]
+		private static void OnScriptsReloaded() {
+//			Debug.Log("On scripts reload window is " + (instance == null ? "null" : "not null"));
+			if(instance != null)
 			{
-				Debug.Log("Another web request is already in progress");
-				return;
-			}
-			webRequest = WebRequest.Create(new Uri(Constants.formulasRepoContentsURL)) as HttpWebRequest;
-			webRequest.UserAgent = "EditorFormulas";
-			webRequest.Method = "GET";
-			webRequest.IfModifiedSince = formulaDataStore.LastUpdateTime;
-
-			webRequest.BeginGetResponse(HandleAsync_GetOnlineFormulas, null);
-		}
-
-		void HandleAsync_GetOnlineFormulas (IAsyncResult ar)
-		{
-			if(!ar.IsCompleted)
-			{
-				return;
-			}
-
-			try
-			{
-				getOnlineFormulasResponse = webRequest.EndGetResponse(ar) as HttpWebResponse;
-				webRequest = null;
-			}
-			catch (WebException ex)
-			{
-				webRequest = null;
-				//TODO: We could get Name Resolution Failure if there's no connection, how to handle?
-			}
-		}
-
-		void HandleAsync_DownloadFormula (IAsyncResult ar)
-		{
-			if(!ar.IsCompleted)
-			{
-				return;
-			}
-
-			try
-			{
-				downloadFormulaResponse = webRequest.EndGetResponse(ar) as HttpWebResponse;
-				webRequest = null;
-			}
-			catch (WebException ex)
-			{
-				webRequest = null;
-				//TODO: We could get Name Resolution Failure if there's no connection, how to handle?
+				instance.Repaint();
 			}
 		}
 
 		void OnUpdate()
 		{
-			if(getOnlineFormulasResponse != null)
+			if(webHelper.DownloadingFormula)
 			{
-				//OK
-				if(getOnlineFormulasResponse.StatusCode == HttpStatusCode.OK)
-				{
-					var responseStreamString = new StreamReader(getOnlineFormulasResponse.GetResponseStream()).ReadToEnd();
-					var repositoryContentsList = MiniJSON.Json.Deserialize(responseStreamString) as List<object>;
-					responseStreamString = string.Empty;
-					foreach(Dictionary<string,object> content in repositoryContentsList)
-					{
-						var downloadURL = content["download_url"] as string;
-						var extension = Path.GetExtension(downloadURL);
-						//If it's a .cs file
-						if(string.Equals(extension, ".cs", StringComparison.InvariantCultureIgnoreCase))
-						{
-							var fileName = Path.GetFileName(downloadURL);
-							var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(downloadURL);
-							//Check to see if it exists in formulaDataStore
-							var formula = formulaDataStore.FormulaData.Find(x => x.name == fileNameWithoutExtension);
-							if(formula == null)
-							{
-								formula = new FormulaData();
-								formula.name = fileNameWithoutExtension;
-								formula.localFilePath = Constants.formulasFolderUnityPath + fileName;
-								formula.downloadURL = downloadURL;
-								formulaDataStore.FormulaData.Add(formula);
-							}
-							else
-							{
-								//If download URL doesn't match (can happen if file was copied to project, instead of downloaded)
-								if(! string.Equals(formula.downloadURL, downloadURL))
-								{
-									//Update download url
-									formula.downloadURL = downloadURL;
-								}
-							}
-						}
-					}
-
-					//Update lastUpdateTime and dirty the formulaDataStore, then re-search and repaint
-					formulaDataStore.lastUpdateTimeBinary = DateTime.UtcNow.ToBinary();
-					EditorUtility.SetDirty(formulaDataStore);
-					FilterBySearchText(searchText);
-					this.Repaint();
-				}
-				//Not modified
-				else if(getOnlineFormulasResponse.StatusCode == HttpStatusCode.NotModified)
-				{
-
-				}
-
-				getOnlineFormulasResponse.Close();
-				getOnlineFormulasResponse = null;
+				doRepaint = true;
 			}
 
-			if(downloadFormulaResponse != null)
+			if(doRepaint)
 			{
-				if(downloadFormulaResponse.StatusCode == HttpStatusCode.OK)
-				{
-					var responseStreamString = new StreamReader(downloadFormulaResponse.GetResponseStream()).ReadToEnd();
-					var fi = new FileInfo(formulaBeingDownloaded.localFilePath);
-					// Delete the file if it exists.
-					if (fi.Exists) 
-					{
-						fi.Delete();
-					}
-					var bytes = System.Text.Encoding.Default.GetBytes(responseStreamString);
-					// Create and write file
-					using(var fs = fi.Create())
-					{
-						fs.Write(bytes, 0, bytes.Length);
-					}
-					formulaBeingDownloaded.downloadTimeUTCBinary = DateTime.UtcNow.ToBinary();
-					formulaBeingDownloaded.updateCheckTimeUTCBinary = formulaBeingDownloaded.downloadTimeUTCBinary;
-					EditorUtility.SetDirty(formulaDataStore);
-					AssetDatabase.Refresh();
-				}
-				//Not modified
-				else if(downloadFormulaResponse.StatusCode == HttpStatusCode.NotModified)
-				{
-					formulaBeingDownloaded.updateCheckTimeUTCBinary = DateTime.UtcNow.ToBinary();
-				}
-
-				formulasToDownload.Remove(formulaBeingDownloaded);
-				formulaBeingDownloaded = null;
-
-				downloadFormulaResponse.Close();
-				downloadFormulaResponse = null;
-			}
-
-			//If there are formulas to be downloaded
-			if(formulasToDownload.Count > 0)
-			{
-				//And there isn't already a WebRequest in progress
-				if(webRequest == null)
-				{
-					formulaBeingDownloaded = formulasToDownload[formulasToDownload.Count - 1];
-					var downloadURL = formulaBeingDownloaded.downloadURL;
-					webRequest = WebRequest.Create(new Uri(downloadURL)) as HttpWebRequest;
-					webRequest.UserAgent = "EditorFormulas";
-					webRequest.Method = "GET";
-					webRequest.IfModifiedSince = DateTime.FromBinary(formulaBeingDownloaded.downloadTimeUTCBinary);
-					webRequest.BeginGetResponse(HandleAsync_DownloadFormula, null);
-				}				
+				this.Repaint();
+				doRepaint = false;
 			}
 		}
 
@@ -315,7 +197,7 @@ namespace EditorFormulas
 				{
 					DrawUsableFormula(formula);
 				}
-				else
+				else if(!formula.localFileExists)
 				{
 					DrawOnlineFormula(formula);
 				}
@@ -342,13 +224,24 @@ namespace EditorFormulas
 				GUILayout.BeginVertical(GUI.skin.box, GUILayout.MaxWidth(this.position.width));
 			}
 
+			GUILayout.BeginHorizontal();
+
 			//Button is only enabled if parameters have been initialized
 			GUI.enabled = parameters.Length == 0 || parameterValuesArray.All(x => x != null);
-			if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 10)))
+			if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 30)))
 			{
 				method.Invoke(null, parameterValuesArray);
 			}
 			GUI.enabled = true;
+			if(GUILayout.Button(optionsButtonGUIContent, GUILayout.MaxWidth(20), GUILayout.MaxHeight(18)))
+			{
+				var menu = new GenericMenu();
+				menu.AddItem(new GUIContent("Open in External Script Editor"), false, OpenFormulaInExternalScriptEditor, formula);
+				menu.AddItem(new GUIContent("Go to download URL"), false, GoToFormulaDownloadURL, formula);
+				menu.AddItem(new GUIContent("Delete"), false, DeleteFormula, formula);
+				menu.ShowAsContext();
+			}
+			GUILayout.EndHorizontal();
 
 			if(parameters.Length > 0)
 			{
@@ -439,23 +332,31 @@ namespace EditorFormulas
 			var guiEnabled = GUI.enabled;
 			GUI.enabled = false;
 			GUILayout.BeginHorizontal();
-			GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 30));
+			GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 34));
 			GUI.enabled = guiEnabled;
-			if(GUILayout.Button(downloadButtonGUIContent, GUILayout.MaxWidth(20), GUILayout.MaxHeight(18)))
+
+			var guiContent = downloadButtonGUIContent;
+			var diffInMilliseconds = DateTime.UtcNow.Subtract(formula.DownloadTimeUTC).TotalMilliseconds;
+			bool compilingOrDownloadingFormula = (EditorApplication.isCompiling && diffInMilliseconds < 20000) || webHelper.IsDownloadingFormula(formula);
+			//If the formula is in WebHelper's download queue or
+			//the editor is compiling and download was less than 20 seconds ago, show spinner
+			if(compilingOrDownloadingFormula)
 			{
-				DownloadFormula(formula);
+				int waitSpinIndex = Mathf.FloorToInt(((float)(diffInMilliseconds % 2000d) / 2000f) * 12f);
+				guiContent = waitSpinGUIContents[waitSpinIndex];
+				doRepaint = true;
+			}
+
+			if(GUILayout.Button(guiContent, GUILayout.MaxWidth(24), GUILayout.MaxHeight(18)))
+			{
+				//Button should do nothing if compiling or downloading formula
+				if(!compilingOrDownloadingFormula)
+				{
+					webHelper.DownloadFormula(formula);
+				}
 			}
 
 			GUILayout.EndHorizontal();
-		}
-
-		void DownloadFormula(FormulaData formula)
-		{
-			if(formulasToDownload.Contains(formula))
-			{
-				return;
-			}
-			formulasToDownload.Add(formula);
 		}
 
 		void FilterBySearchText(string text)
@@ -500,12 +401,53 @@ namespace EditorFormulas
 				);
 			}
 
-			//If it has been 5 minutes since last check, retrieve formulas from web
-			if(webRequest != null)
-			{
-				//TODO
-			}
+			searchResults.Sort((x,y) => x.name.CompareTo(y.name));
 		}
 
+		void FormulaDataUpdated()
+		{
+			FilterBySearchText(searchText);
+			this.Repaint();
+		}
+
+		void OpenFormulaInExternalScriptEditor (object obj)
+		{
+			var formulaData = obj as FormulaData;
+			if(formulaData == null)
+			{
+				return;
+			}
+			AssetDatabase.OpenAsset(AssetDatabase.LoadAssetAtPath<MonoScript>(formulaData.projectFilePath).GetInstanceID());
+		}
+
+		void GoToFormulaDownloadURL (object obj)
+		{
+			var formulaData = obj as FormulaData;
+			if(formulaData == null)
+			{
+				return;
+			}
+			Application.OpenURL(formulaData.downloadURL);
+		}
+
+		void DeleteFormula (object obj)
+		{
+			var formulaData = obj as FormulaData;
+			if(formulaData == null)
+			{
+				return;
+			}
+			var fi = new FileInfo(Utils.GetFullPathFromAssetsPath(formulaData.projectFilePath));
+			if(fi.Exists)
+			{
+				fi.Delete();
+				AssetDatabase.Refresh();
+			}
+			formulaData.projectFilePath = string.Empty;
+			formulaData.DownloadTimeUTC = DateTime.MinValue;
+			formulaData.methodInfo = null;
+			EditorUtility.SetDirty(formulaDataStore);
+			FilterBySearchText(searchText);
+		}
 	}
 }
