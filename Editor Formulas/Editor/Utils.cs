@@ -59,5 +59,29 @@ namespace EditorFormulas
 			//TODO: implement
 			return downloadURL;
 		}
+
+		public static LayerMask LayerMaskField( string label, LayerMask layerMask) {
+			var layers = new string[32];
+			var layerNumbers = new int[32];
+
+			for (int i = 0; i < 32; i++) {
+				string layerName = LayerMask.LayerToName(i);
+				layers[i] = layerName;
+				layerNumbers[i] = i;
+			}
+			int maskWithoutEmpty = 0;
+			for (int i = 0; i < layerNumbers.Length; i++) {
+				if (((1 << layerNumbers[i]) & layerMask.value) > 0)
+					maskWithoutEmpty |= (1 << i);
+			}
+			maskWithoutEmpty = UnityEditor.EditorGUILayout.MaskField( label, maskWithoutEmpty, layers);
+			int mask = 0;
+			for (int i = 0; i < layerNumbers.Length; i++) {
+				if ((maskWithoutEmpty & (1 << i)) > 0)
+					mask |= (1 << layerNumbers[i]);
+			}
+			layerMask.value = mask;
+			return layerMask;
+		}
 	}
 }

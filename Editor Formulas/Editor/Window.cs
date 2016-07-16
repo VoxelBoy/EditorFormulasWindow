@@ -219,7 +219,9 @@ namespace EditorFormulas
 			var parameters = parametersDictionary[method];
 			var parameterValuesArray = parameterValuesDictionary[method];
 
-			if(parameters.Length > 0)
+			var hasParameters = parameters.Length > 0;
+
+			if(hasParameters)
 			{
 				GUILayout.BeginVertical(GUI.skin.box, GUILayout.MaxWidth(this.position.width));
 			}
@@ -228,7 +230,7 @@ namespace EditorFormulas
 
 			//Commented out for now, not sure if necessary - Button is only enabled if parameters have been initialized
 //			GUI.enabled = parameters.Length == 0 || parameterValuesArray.All(x => x != null);
-			if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.Width(this.position.width - 32)))
+			if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.Width(this.position.width - (hasParameters ? 36 : 32))))
 			{
 				method.Invoke(null, parameterValuesArray);
 			}
@@ -243,7 +245,7 @@ namespace EditorFormulas
 			}
 			GUILayout.EndHorizontal();
 
-			if(parameters.Length > 0)
+			if(hasParameters)
 			{
 				//Draw parameter fields
 				for (int p=0; p<parameters.Length; p++) {
@@ -271,6 +273,10 @@ namespace EditorFormulas
 					else if(parameterType == typeof(string))
 					{
 						newValue = EditorGUILayout.TextField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((string) valueObj) : string.Empty );
+					}
+					else if(parameterType == typeof(bool))
+					{
+						newValue = EditorGUILayout.Toggle(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((bool) valueObj) : false);
 					}
 					else if(parameterType == typeof(Rect))
 					{
@@ -310,7 +316,13 @@ namespace EditorFormulas
 					else if(parameterType.IsEnum)
 					{
 						newValue = EditorGUILayout.EnumPopup(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((System.Enum)valueObj) : default(System.Enum));
+					
 					}
+					else if(parameterType == typeof(LayerMask))
+					{
+						newValue = Utils.LayerMaskField(niceParameterName, valueObj != null ? ((LayerMask)valueObj) : default(LayerMask));
+					}
+					//TODO: Implement layer mask field
 					if(EditorGUI.EndChangeCheck())
 					{
 						parameterValuesArray[p] = newValue;
@@ -319,7 +331,7 @@ namespace EditorFormulas
 				}
 			}
 
-			if(parameters.Length > 0)
+			if(hasParameters)
 			{
 				GUILayout.EndVertical();
 			}
@@ -363,6 +375,7 @@ namespace EditorFormulas
 		{
 			searchResults.Clear();
 			searchResults.AddRange(formulaDataStore.FormulaData);
+			searchResults.Sort((x,y) => x.name.CompareTo(y.name));
 
 			if(string.IsNullOrEmpty(text.Trim()))
 			{
@@ -400,8 +413,6 @@ namespace EditorFormulas
 					}
 				);
 			}
-
-			searchResults.Sort((x,y) => x.name.CompareTo(y.name));
 		}
 
 		void FormulaDataUpdated()
