@@ -226,13 +226,13 @@ namespace EditorFormulas
 
 			GUILayout.BeginHorizontal();
 
-			//Button is only enabled if parameters have been initialized
-			GUI.enabled = parameters.Length == 0 || parameterValuesArray.All(x => x != null);
-			if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 30)))
+			//Commented out for now, not sure if necessary - Button is only enabled if parameters have been initialized
+//			GUI.enabled = parameters.Length == 0 || parameterValuesArray.All(x => x != null);
+			if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.Width(this.position.width - 32)))
 			{
 				method.Invoke(null, parameterValuesArray);
 			}
-			GUI.enabled = true;
+//			GUI.enabled = true;
 			if(GUILayout.Button(optionsButtonGUIContent, GUILayout.MaxWidth(20), GUILayout.MaxHeight(18)))
 			{
 				var menu = new GenericMenu();
@@ -332,7 +332,7 @@ namespace EditorFormulas
 			var guiEnabled = GUI.enabled;
 			GUI.enabled = false;
 			GUILayout.BeginHorizontal();
-			GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 34));
+			GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 36));
 			GUI.enabled = guiEnabled;
 
 			var guiContent = downloadButtonGUIContent;
@@ -443,9 +443,9 @@ namespace EditorFormulas
 				fi.Delete();
 				AssetDatabase.Refresh();
 			}
-			formulaData.projectFilePath = string.Empty;
 			formulaData.DownloadTimeUTC = DateTime.MinValue;
 			formulaData.methodInfo = null;
+			formulaData.localFileExists = false;
 			EditorUtility.SetDirty(formulaDataStore);
 			FilterBySearchText(searchText);
 		}

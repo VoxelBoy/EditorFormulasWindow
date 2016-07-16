@@ -168,8 +168,6 @@ namespace EditorFormulas
 						}
 						var bytes = System.Text.Encoding.Default.GetBytes(responseStreamString);
 						// Create and write file
-						//TODO: Can get Unauthorized access exception if we delete a formula and
-						//try to download a formula before compilation is finished
 						using(var fs = fi.Create())
 						{
 							fs.Write(bytes, 0, bytes.Length);
