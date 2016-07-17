@@ -9,6 +9,8 @@ namespace EditorFormulas
 		//Should match method info name
 		public string name;
 		public string downloadURL;
+		public string htmlURL;
+		public string apiURL;
 		public string projectFilePath;
 		public bool IsUsable
 		{
@@ -28,11 +30,6 @@ namespace EditorFormulas
 			}
 		}
 
-		[System.NonSerialized]
-		public MethodInfo methodInfo;
-		[System.NonSerialized]
-		public bool localFileExists;
-		[System.NonSerialized]
 		public bool updateAvailable = false;
 
 		public long updateCheckTimeUTCBinary;
@@ -47,5 +44,10 @@ namespace EditorFormulas
 				updateCheckTimeUTCBinary = value.ToBinary();
 			}
 		}
+
+		[System.NonSerialized]
+		public MethodInfo methodInfo;
+		[System.NonSerialized]
+		public bool localFileExists;
 	}
 }

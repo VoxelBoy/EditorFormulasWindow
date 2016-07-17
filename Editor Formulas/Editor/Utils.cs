@@ -54,12 +54,6 @@ namespace EditorFormulas
 			return fullPath;
 		}
 
-		public static string ConvertFormulaDownloadURLToGitHubURL(string downloadURL)
-		{
-			//TODO: implement
-			return downloadURL;
-		}
-
 		public static LayerMask LayerMaskField( string label, LayerMask layerMask) {
 			var layers = new string[32];
 			var layerNumbers = new int[32];

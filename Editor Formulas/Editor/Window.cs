@@ -8,10 +8,13 @@ using System.Collections.Generic;
 
 namespace EditorFormulas 
 {
-	public class Window : EditorWindow {
+	public class Window : EditorWindow, IHasCustomMenu {
 
 		[SerializeField]
 		private Texture2D downloadTexture;
+
+		[SerializeField]
+		private Texture2D updateTexture;
 
 		[SerializeField]
 		private Texture2D optionsTexture;
@@ -35,10 +38,17 @@ namespace EditorFormulas
 		FormulaDataStore formulaDataStore;
 
 		GUIContent downloadButtonGUIContent;
+		GUIContent updateButtonGUIContent;
 		GUIContent optionsButtonGUIContent;
 		GUIContent[] waitSpinGUIContents;
 
 		bool doRepaint = false;
+		public static bool DebugMode
+		{
+			get;
+			private set;
+		}
+		private GUIContent debugModeGUIContent = new GUIContent("Debug Mode");
 
 		private static Window instance;
 
@@ -55,6 +65,7 @@ namespace EditorFormulas
 		void OnEnable()
 		{
 			instance = this;
+			DebugMode = EditorPrefs.GetBool("EditorFormulasWindow_DebugMode", false);
 			//Can be used to get the path to this class' path and use relative paths if necessary
 			//Debug.Log("Path: " + AssetDatabase.GetAssetPath(MonoScript.FromScriptableObject(this)));
 			formulaDataStore = FormulaDataStore.LoadFromAssetDatabaseOrCreate();
@@ -64,7 +75,9 @@ namespace EditorFormulas
 			webHelper.FormulaDataUpdated += FormulaDataUpdated;
 
 			downloadButtonGUIContent = new GUIContent(downloadTexture, "Download Formula");
+			updateButtonGUIContent = new GUIContent(updateTexture, "Update Available");
 			optionsButtonGUIContent = new GUIContent(optionsTexture, "Options");
+			//TODO: Add Hide button
 
 			waitSpinGUIContents = new GUIContent[12];
 			for(int i=0; i<12; i++)
@@ -88,6 +101,7 @@ namespace EditorFormulas
 			FilterBySearchText(searchText);
 
 			webHelper.GetOnlineFormulas();
+//			webHelper.CheckForAllFormulaUpdates();
 
 			EditorApplication.update += OnUpdate;
 		}
@@ -125,11 +139,10 @@ namespace EditorFormulas
 						formula = new FormulaData();
 						formula.name = fileNameWithoutExtension;
 						formula.projectFilePath = Constants.formulasFolderUnityPath + file.Name;
-						formula.localFileExists = new FileInfo(Utils.GetFullPathFromAssetsPath(formula.projectFilePath)).Exists;
 						formulaDataStore.FormulaData.Add(formula);
 						EditorUtility.SetDirty(formulaDataStore);
 					}
-					//Update formula's methodInfo reference
+					formula.localFileExists = new FileInfo(Utils.GetFullPathFromAssetsPath(formula.projectFilePath)).Exists;
 					formula.methodInfo = methodInfo;
 				}
 			}
@@ -150,12 +163,26 @@ namespace EditorFormulas
 		}
 
 		[UnityEditor.Callbacks.DidReloadScripts]
-		private static void OnScriptsReloaded() {
+		private static void OnScriptsReloaded()
+		{
 //			Debug.Log("On scripts reload window is " + (instance == null ? "null" : "not null"));
 			if(instance != null)
 			{
 				instance.Repaint();
 			}
+		}
+
+		public void AddItemsToMenu(GenericMenu menu)
+		{
+			//TODO: Add Show Hidden formulas button
+			//TODO: Add Show Online formulas button
+			menu.AddItem(debugModeGUIContent, DebugMode, ToggleDebugMode);
+		}
+
+		void ToggleDebugMode()
+		{
+			DebugMode = !DebugMode;
+			EditorPrefs.SetBool("EditorFormulasWindow_DebugMode", DebugMode);
 		}
 
 		void OnUpdate()
@@ -228,9 +255,19 @@ namespace EditorFormulas
 
 			GUILayout.BeginHorizontal();
 
+			var formulaButtonWidth = this.position.width - 32;
+			if(hasParameters)
+			{
+				formulaButtonWidth -= 4;
+			}
+			if(formula.updateAvailable)
+			{
+				formulaButtonWidth -= 32;
+			}
+
 			//Commented out for now, not sure if necessary - Button is only enabled if parameters have been initialized
 //			GUI.enabled = parameters.Length == 0 || parameterValuesArray.All(x => x != null);
-			if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.Width(this.position.width - (hasParameters ? 36 : 32))))
+			if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.Width(formulaButtonWidth)))
 			{
 				method.Invoke(null, parameterValuesArray);
 			}
@@ -239,16 +276,23 @@ namespace EditorFormulas
 			{
 				var menu = new GenericMenu();
 				menu.AddItem(new GUIContent("Open in External Script Editor"), false, OpenFormulaInExternalScriptEditor, formula);
-				menu.AddItem(new GUIContent("Go to download URL"), false, GoToFormulaDownloadURL, formula);
+				menu.AddItem(new GUIContent("Go to GitHub page"), false, GoToFormulaDownloadURL, formula);
 				menu.AddItem(new GUIContent("Delete"), false, DeleteFormula, formula);
 				menu.ShowAsContext();
 			}
+
+			if(formula.updateAvailable)
+			{
+				DrawDownloadButton(updateButtonGUIContent, formula);
+			}
+
 			GUILayout.EndHorizontal();
 
 			if(hasParameters)
 			{
 				//Draw parameter fields
-				for (int p=0; p<parameters.Length; p++) {
+				for (int p=0; p<parameters.Length; p++)
+				{
 					var parameter = parameters[p];
 					var parameterType = parameter.ParameterType;
 					var niceParameterName = ObjectNames.NicifyVariableName(parameter.Name);
@@ -263,7 +307,8 @@ namespace EditorFormulas
 	//				}
 
 					EditorGUI.BeginChangeCheck();
-					if (parameterType == typeof(int)) {
+					if (parameterType == typeof(int))
+					{
 						newValue = EditorGUILayout.IntField(new GUIContent(niceParameterName, niceParameterName), valueObj != null ? ((int) valueObj) : 0 );
 					}
 					else if(parameterType == typeof(float))
@@ -322,7 +367,6 @@ namespace EditorFormulas
 					{
 						newValue = Utils.LayerMaskField(niceParameterName, valueObj != null ? ((LayerMask)valueObj) : default(LayerMask));
 					}
-					//TODO: Implement layer mask field
 					if(EditorGUI.EndChangeCheck())
 					{
 						parameterValuesArray[p] = newValue;
@@ -346,8 +390,13 @@ namespace EditorFormulas
 			GUILayout.BeginHorizontal();
 			GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 36));
 			GUI.enabled = guiEnabled;
+			DrawDownloadButton(downloadButtonGUIContent, formula);
+			GUILayout.EndHorizontal();
+		}
 
-			var guiContent = downloadButtonGUIContent;
+		void DrawDownloadButton(GUIContent defaultContent, FormulaData formula)
+		{
+			var guiContent = defaultContent;
 			var diffInMilliseconds = DateTime.UtcNow.Subtract(formula.DownloadTimeUTC).TotalMilliseconds;
 			bool compilingOrDownloadingFormula = (EditorApplication.isCompiling && diffInMilliseconds < 20000) || webHelper.IsDownloadingFormula(formula);
 			//If the formula is in WebHelper's download queue or
@@ -364,11 +413,9 @@ namespace EditorFormulas
 				//Button should do nothing if compiling or downloading formula
 				if(!compilingOrDownloadingFormula)
 				{
-					webHelper.DownloadFormula(formula);
+					webHelper.DownloadFormula(formula, false);
 				}
 			}
-
-			GUILayout.EndHorizontal();
 		}
 
 		void FilterBySearchText(string text)
@@ -438,7 +485,7 @@ namespace EditorFormulas
 			{
 				return;
 			}
-			Application.OpenURL(formulaData.downloadURL);
+			Application.OpenURL(formulaData.htmlURL);
 		}
 
 		void DeleteFormula (object obj)

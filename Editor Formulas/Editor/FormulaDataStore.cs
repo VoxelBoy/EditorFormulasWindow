@@ -10,9 +10,6 @@ namespace EditorFormulas
 
 		public List<FormulaData> FormulaData;
 		public long lastUpdateTimeBinary;
-
-		public string lastGetOnlineFormulasResponse;
-
 		public DateTime LastUpdateTime
 		{
 			get
@@ -24,6 +21,21 @@ namespace EditorFormulas
 				lastUpdateTimeBinary = value.ToBinary();
 			}
 		}
+		public long lastUpdateAttemptTime;
+		public DateTime LastUpdateAttemptTime
+		{
+			get
+			{
+				return DateTime.FromBinary(lastUpdateAttemptTime);
+			}
+			set
+			{
+				lastUpdateAttemptTime = value.ToBinary();
+			}
+		}
+
+		public string lastGetOnlineFormulasResponse;
+
 
 		public static FormulaDataStore LoadFromAssetDatabaseOrCreate()
 		{
