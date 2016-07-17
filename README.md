@@ -37,5 +37,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 
 Download and update icons by Mike Rowe, from Noun Project
 https://thenounproject.com/itsmikerowe/
+
 Options icon by Hello Many CA, from Noun Project
 https://thenounproject.com/search/?q=options&i=65588
