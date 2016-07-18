@@ -1,4 +1,4 @@
-## EditorFormulasWindow
+## Editor Formulas Window
 
 A simple window that lets you tap into all the one-method Editor scripts submitted by the Unity community.  
 It's like a community-built Swiss army knife that has more tools added every day.  
@@ -6,13 +6,13 @@ It's like a community-built Swiss army knife that has more tools added every day
 <img width="330" alt="Editor Formulas Window" src="https://cloud.githubusercontent.com/assets/433535/16903304/9077bc06-4c83-11e6-9122-e0e491cf243e.png">
 
 ### Using the window
-When you open the window for the first time, it will be empty for 1-2 seconds while it downloads the list of available formulas from the [Editor Formulas Github repository](https://github.com/VoxelBoy/EditorFormulas). Once the initial download is complete, you will see a list of greyed out buttons for each formula with a download button next to them, like so:  
+When you open the window for the first time, it will be empty for 1-2 seconds while it downloads the list of available Formulas from the [Editor Formulas Github repository](https://github.com/VoxelBoy/EditorFormulas). Once the initial download is complete, you will see a list of greyed out buttons for each Formula with a download button next to them, like so:  
 
 <img width="302" alt="Download Formula" src="https://cloud.githubusercontent.com/assets/433535/16903516/801d052c-4c89-11e6-933e-dadb57f061f2.png">
 
-Click the download button next to a formula and in a few seconds, it will be ready to use.  
+Click the download button next to a Formula and in a few seconds, it will be ready to use.  
 Click on the large button with the Formula name to run the Formula.  
-If the formula has parameters, they will be shown beneath the button.  
+If the Formula has parameters, they will be shown below the button.  
 
 <img width="302" alt="Usable Formula" src="https://cloud.githubusercontent.com/assets/433535/16903531/e9eecd46-4c89-11e6-97bb-e325fb2c4de7.png">
 
