@@ -1,6 +1,6 @@
 ## Editor Formulas Window
 
-A simple window that lets you tap into all the one-method Editor scripts submitted by the Unity community.  
+A simple window that lets you tap into all the single-method Editor scripts submitted by the Unity community.  
 It's like a community-built Swiss army knife that has more tools added every day.  
 
 <img width="330" alt="Editor Formulas Window" src="https://cloud.githubusercontent.com/assets/433535/16903304/9077bc06-4c83-11e6-9122-e0e491cf243e.png">
