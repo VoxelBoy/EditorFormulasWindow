@@ -45,6 +45,8 @@ namespace EditorFormulas
 			}
 		}
 
+		public bool hidden = false;
+
 		[System.NonSerialized]
 		public MethodInfo methodInfo;
 		[System.NonSerialized]

@@ -8,5 +8,9 @@
 
 		public const double getOnlineFormulasFrequencyInMinutes = 5d;
 		public const double checkForFormulaUpdateFrequencyInMinutes = 60d;
+
+		public const string debugModePrefKey = "EditorFormulasWindow_DebugMode";
+		public const string showHiddenFormulasPrefKey = "EditorFormulasWindow_ShowHiddenFormulas";
+		public const string showOnlineFormulasPrefKey = "EditorFormulasWindow_ShowOnlineFormulas";
 	}
 }

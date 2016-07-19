@@ -43,12 +43,55 @@ namespace EditorFormulas
 		GUIContent[] waitSpinGUIContents;
 
 		bool doRepaint = false;
-		public static bool DebugMode
+
+		bool debugMode = false;
+		bool DebugMode
 		{
-			get;
-			private set;
+			get
+			{
+				return debugMode;
+			}
+			set
+			{
+				debugMode = value;
+				if(webHelper != null)
+				{
+					webHelper.DebugMode = debugMode;
+				}
+			}
 		}
+
+		bool showHiddenFormulas = false;
+		public bool ShowHiddenFormulas
+		{
+			get
+			{
+				return showHiddenFormulas;
+			}
+			private set
+			{
+				showHiddenFormulas = value;
+				FilterBySearchText(searchText);
+			}
+		}
+
+		bool showOnlineFormulas = true;
+		public bool ShowOnlineFormulas
+		{
+			get
+			{
+				return showOnlineFormulas;
+			}
+			private set
+			{
+				showOnlineFormulas = value;
+				FilterBySearchText(searchText);
+			}
+		}
+
 		private GUIContent debugModeGUIContent = new GUIContent("Debug Mode");
+		private GUIContent showHiddenFormulasGUIContent = new GUIContent("Show Hidden Formulas");
+		private GUIContent showOnlineFormulasGUIContent = new GUIContent("Show Online Formulas");
 
 		private static Window instance;
 
@@ -65,19 +108,29 @@ namespace EditorFormulas
 		void OnEnable()
 		{
 			instance = this;
-			DebugMode = EditorPrefs.GetBool("EditorFormulasWindow_DebugMode", false);
-			//Can be used to get the path to this class' path and use relative paths if necessary
-			//Debug.Log("Path: " + AssetDatabase.GetAssetPath(MonoScript.FromScriptableObject(this)));
-			formulaDataStore = FormulaDataStore.LoadFromAssetDatabaseOrCreate();
 
+			//Init formula data store
+			formulaDataStore = FormulaDataStore.LoadFromAssetDatabaseOrCreate();
+			//Init Web Helper
 			webHelper = ScriptableObject.CreateInstance<WebHelper>();
 			webHelper.Init(formulaDataStore);
 			webHelper.FormulaDataUpdated += FormulaDataUpdated;
 
+			DebugMode = EditorPrefs.GetBool(Constants.debugModePrefKey, false);
+			//These two properties cause search results to be refreshed
+			//So formulaDataStore needs to be initialized before these are set
+			ShowHiddenFormulas = EditorPrefs.GetBool(Constants.showHiddenFormulasPrefKey, false);
+			ShowOnlineFormulas = EditorPrefs.GetBool(Constants.showOnlineFormulasPrefKey, true);
+
+			webHelper.DebugMode = DebugMode;
+
+			//This code can be used to get the path to this class' path and use relative paths if necessary
+			//Debug.Log("Path: " + AssetDatabase.GetAssetPath(MonoScript.FromScriptableObject(this)));
+
+			//Init GUIContents
 			downloadButtonGUIContent = new GUIContent(downloadTexture, "Download Formula");
 			updateButtonGUIContent = new GUIContent(updateTexture, "Update Available");
 			optionsButtonGUIContent = new GUIContent(optionsTexture, "Options");
-			//TODO: Add Hide button
 
 			waitSpinGUIContents = new GUIContent[12];
 			for(int i=0; i<12; i++)
@@ -174,15 +227,27 @@ namespace EditorFormulas
 
 		public void AddItemsToMenu(GenericMenu menu)
 		{
-			//TODO: Add Show Hidden formulas button
-			//TODO: Add Show Online formulas button
 			menu.AddItem(debugModeGUIContent, DebugMode, ToggleDebugMode);
+			menu.AddItem(showHiddenFormulasGUIContent, ShowHiddenFormulas, ToggleShowHiddenFormulas);
+			menu.AddItem(showOnlineFormulasGUIContent, ShowOnlineFormulas, ToggleShowOnlineFormulas);
 		}
 
 		void ToggleDebugMode()
 		{
 			DebugMode = !DebugMode;
-			EditorPrefs.SetBool("EditorFormulasWindow_DebugMode", DebugMode);
+			EditorPrefs.SetBool(Constants.debugModePrefKey, DebugMode);
+		}
+
+		void ToggleShowHiddenFormulas()
+		{
+			ShowHiddenFormulas = !ShowHiddenFormulas;
+			EditorPrefs.SetBool(Constants.showHiddenFormulasPrefKey, ShowHiddenFormulas);
+		}
+
+		void ToggleShowOnlineFormulas()
+		{
+			ShowOnlineFormulas = !ShowOnlineFormulas;
+			EditorPrefs.SetBool(Constants.showOnlineFormulasPrefKey, ShowOnlineFormulas);
 		}
 
 		void OnUpdate()
@@ -272,14 +337,7 @@ namespace EditorFormulas
 				method.Invoke(null, parameterValuesArray);
 			}
 //			GUI.enabled = true;
-			if(GUILayout.Button(optionsButtonGUIContent, GUILayout.MaxWidth(20), GUILayout.MaxHeight(18)))
-			{
-				var menu = new GenericMenu();
-				menu.AddItem(new GUIContent("Open in External Script Editor"), false, OpenFormulaInExternalScriptEditor, formula);
-				menu.AddItem(new GUIContent("Go to GitHub page"), false, GoToFormulaDownloadURL, formula);
-				menu.AddItem(new GUIContent("Delete"), false, DeleteFormula, formula);
-				menu.ShowAsContext();
-			}
+			DrawOptionsButton(formula);
 
 			if(formula.updateAvailable)
 			{
@@ -388,10 +446,30 @@ namespace EditorFormulas
 			var guiEnabled = GUI.enabled;
 			GUI.enabled = false;
 			GUILayout.BeginHorizontal();
-			GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 36));
+			GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.MaxWidth(this.position.width - 60));
 			GUI.enabled = guiEnabled;
 			DrawDownloadButton(downloadButtonGUIContent, formula);
+			DrawOptionsButton(formula);
 			GUILayout.EndHorizontal();
+		}
+
+		void DrawOptionsButton(FormulaData formula)
+		{
+			if(GUILayout.Button(optionsButtonGUIContent, GUILayout.MaxWidth(20), GUILayout.MaxHeight(18)))
+			{
+				var menu = new GenericMenu();
+				if(formula.localFileExists)
+				{
+					menu.AddItem(new GUIContent("Open in External Script Editor"), false, OpenFormulaInExternalScriptEditor, formula);
+				}
+				menu.AddItem(new GUIContent("Go to GitHub page"), false, GoToFormulaDownloadURL, formula);
+				menu.AddItem(new GUIContent("Hide"), formula.hidden, ToggleFormulaHidden, formula);
+				if(formula.localFileExists)
+				{
+					menu.AddItem(new GUIContent("Delete"), false, DeleteFormula, formula);
+				}
+				menu.ShowAsContext();
+			}
 		}
 
 		void DrawDownloadButton(GUIContent defaultContent, FormulaData formula)
@@ -423,6 +501,16 @@ namespace EditorFormulas
 			searchResults.Clear();
 			searchResults.AddRange(formulaDataStore.FormulaData);
 			searchResults.Sort((x,y) => x.name.CompareTo(y.name));
+
+			if(! ShowHiddenFormulas)
+			{
+				searchResults.RemoveAll(x => x.hidden);
+			}
+
+			if(! ShowOnlineFormulas)
+			{
+				searchResults.RemoveAll(x => !(x.IsUsable) && !(x.localFileExists));
+			}
 
 			if(string.IsNullOrEmpty(text.Trim()))
 			{
@@ -486,6 +574,19 @@ namespace EditorFormulas
 				return;
 			}
 			Application.OpenURL(formulaData.htmlURL);
+		}
+
+		void ToggleFormulaHidden (object obj)
+		{
+			var formulaData = obj as FormulaData;
+			if(formulaData == null)
+			{
+				return;
+			}
+
+			formulaData.hidden = ! formulaData.hidden;
+			EditorUtility.SetDirty(formulaDataStore);
+			FilterBySearchText(searchText);
 		}
 
 		void DeleteFormula (object obj)

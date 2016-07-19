@@ -53,6 +53,11 @@ namespace EditorFormulas
 
 		List<string> debugMessagesFromOtherThreads = new List<string>();
 
+		public bool DebugMode
+		{
+			get; set;
+		}
+
 		public void Init(FormulaDataStore formulaDataStore)
 		{
 			this.formulaDataStore = formulaDataStore;
@@ -410,7 +415,7 @@ namespace EditorFormulas
 
 		void DebugLog(string message)
 		{
-			if(Window.DebugMode)
+			if(DebugMode)
 			{
 				Debug.Log(message);
 			}
