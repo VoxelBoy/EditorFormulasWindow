@@ -26,9 +26,6 @@ namespace EditorFormulas
 
 		List<FormulaData> searchResults = new List<FormulaData>();
 
-		public GUIStyle foldout;
-		private bool initStyles = false;
-
 		private Vector2 scrollPos;
 
 		public string searchText = string.Empty;
@@ -266,11 +263,6 @@ namespace EditorFormulas
 
 		void OnGUI()
 		{
-			if(!initStyles)
-			{
-				initStyles = true;
-			}
-
 			EditorGUI.BeginChangeCheck();
 			searchText = EditorGUILayout.TextField(searchText);
 			if(EditorGUI.EndChangeCheck())

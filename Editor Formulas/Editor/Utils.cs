@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using System;
+using System.Linq;
 using System.IO;
 using System.Collections;
 using System.Reflection;
@@ -45,6 +46,21 @@ namespace EditorFormulas
 			}
 			var method = editorFormulasType.GetMethod(name, BindingFlags.Static | BindingFlags.Public);
 			return method;
+		}
+
+		public static MethodInfo[] GetAllFormulaMethodsWithAttribute()
+		{
+			var assembly = System.AppDomain.CurrentDomain.GetAssemblies().First(x => x.FullName.StartsWith("Assembly-CSharp-Editor"));
+			if(assembly == null)
+			{
+				Debug.LogError("Could not find Assembly-CSharp-Editor assembly");
+				return null;
+			}
+			var methods = assembly
+				.GetTypes()
+				.SelectMany(x => x.GetMethods())
+				.Where(y => y.GetCustomAttributes(typeof(FormulaAttribute), false).Any()).ToArray();
+			return methods;
 		}
 
 		public static string GetFullPathFromAssetsPath(string assetsPath)

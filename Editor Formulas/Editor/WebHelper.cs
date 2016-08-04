@@ -335,10 +335,18 @@ namespace EditorFormulas
 
 		public void DownloadFormula(FormulaData formulaData, bool isUpdateCheck)
 		{
-			DebugLog("Download Formula: " + formulaData.name);
+			DebugLog("Download Formula: " + formulaData.name + " isUpdateCheck: " + isUpdateCheck);
 			if(downloadFormulaActions.Any(x => x.formulaData == formulaData))
 			{
 				Debug.Log("Formula already being downloaded");
+				return;
+			}
+			var urlToUse = isUpdateCheck ? formulaData.apiURL : formulaData.downloadURL;
+			if(string.IsNullOrEmpty(urlToUse))
+			{
+				formulaData.UpdateCheckTimeUTC = DateTime.UtcNow;
+				EditorUtility.SetDirty(formulaDataStore);
+				DebugLog("Formula's url to use is null or empty, not downloading.");
 				return;
 			}
 
@@ -350,7 +358,7 @@ namespace EditorFormulas
 				formulaData.UpdateCheckTimeUTC = DateTime.UtcNow;
 				EditorUtility.SetDirty(formulaDataStore);
 			}
-			var request = WebRequest.Create(new Uri(isUpdateCheck ? formulaData.apiURL : formulaData.downloadURL)) as HttpWebRequest;
+			var request = WebRequest.Create(new Uri(urlToUse)) as HttpWebRequest;
 			downloadFormulaAction.request = request;
 			request.UserAgent = "EditorFormulas";
 			request.Method = "GET";
