@@ -5,8 +5,9 @@ using System.IO;
 using System.Net;
 using System.Net.Cache;
 using System.Linq;
-using System.Collections;
+using System.Security.Cryptography.X509Certificates;
 using System.Collections.Generic;
+using System.Net.Security;
 
 namespace EditorFormulas
 {
@@ -67,9 +68,11 @@ namespace EditorFormulas
 		{
 			DebugLog("Web Helper On Enable");
 			EditorApplication.update += OnUpdate;
-		}
+            //Required for HttpWebRequest to not complain about certificate errors
+            ServicePointManager.ServerCertificateValidationCallback = (object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors) => true;
+        }
 
-		void OnDisable()
+        void OnDisable()
 		{
 			DebugLog("Web Helper On Disable");
 			EditorApplication.update -= OnUpdate;
@@ -316,19 +319,26 @@ namespace EditorFormulas
 				debugMessagesFromOtherThreads.Add("Exception! " + ex.GetType().FullName);
 				var response = ex.Response as HttpWebResponse;
 				//Not modified
-				if(response.StatusCode == HttpStatusCode.NotModified)
+				if(response != null)
 				{
-					debugMessagesFromOtherThreads.Add("Not modified");
-					formulaDataStore.LastUpdateTime = DateTime.UtcNow;
-					useLastGetOnlineFormulasResponse = true;
-					doDirtyFormulaDataStore = true;
-					connectionProblem = false;
+                    if (response.StatusCode == HttpStatusCode.NotModified)
+                    {
+                        debugMessagesFromOtherThreads.Add("Not modified");
+                        formulaDataStore.LastUpdateTime = DateTime.UtcNow;
+                        useLastGetOnlineFormulasResponse = true;
+                        doDirtyFormulaDataStore = true;
+                        connectionProblem = false;
+                    }
+				    else
+				    {
+					    debugMessagesFromOtherThreads.Add("Something else: " + response.StatusCode);
+					    connectionProblem = true;
+				    }
 				}
-				else
-				{
-					debugMessagesFromOtherThreads.Add("Something else: " + response.StatusCode);
-					connectionProblem = true;
-				}
+                else
+                {
+                    debugMessagesFromOtherThreads.Add("Response in Exception is null");
+                }
 				getOnlineFormulasWebRequest = null;
 			}
 		}
