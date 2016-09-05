@@ -34,7 +34,7 @@ If you want to submit a Formula of your own:
 
 1. Create a copy of the FormulaTemplate.cs file that you can find in the Editor Formulas/Editor/Formulas folder.  
 2. Choose a name for your Formula. Rename the file and the class with the CamelCase version of your Formula name.
-3. Modify the FormulaAttribute on the already existing Run method to pass it the formula name, tooltip , and author name.
+3. Modify the FormulaAttribute on the already existing Run method to pass it the formula name, tooltip, and author name.
 4. Fork the [Editor Formulas Github repository](https://github.com/VoxelBoy/EditorFormulas) and submit your Formula as a pull request.
 5. Your Formula will be quickly reviewed. If it's not directly accepted, you will be contacted to correct any issues found.
 
