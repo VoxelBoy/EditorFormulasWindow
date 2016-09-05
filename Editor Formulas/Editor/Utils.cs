@@ -63,6 +63,17 @@ namespace EditorFormulas
 			return methods;
 		}
 
+		public static FormulaAttribute GetFormulaAttributeForMethodInfo(MethodInfo method)
+		{
+			var attributes = method.GetCustomAttributes(typeof(FormulaAttribute), false);
+			if(attributes.Length == 0)
+			{
+				return null;
+			}
+			var formulaAttribute = attributes[0] as FormulaAttribute;
+			return formulaAttribute;
+		}
+
 		public static string GetFullPathFromAssetsPath(string assetsPath)
 		{
 			var assetsDirectory = new DirectoryInfo(Application.dataPath);

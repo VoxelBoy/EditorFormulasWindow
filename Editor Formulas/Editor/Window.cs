@@ -169,31 +169,34 @@ namespace EditorFormulas
 
 		void LoadLocalFormulas()
 		{
-			var editorFormulasDirectory = new DirectoryInfo(Utils.GetFullPathFromAssetsPath(Constants.formulasFolderUnityPath));
-			var files = new List<FileInfo>(editorFormulasDirectory.GetFiles());
-			//Remove all files that don't have a .cs extension
-			files.RemoveAll(x => ! x.Extension.Equals(".cs", StringComparison.InvariantCultureIgnoreCase));
+			var methodList = new List<MethodInfo>(Utils.GetAllFormulaMethodsWithAttribute());
 
-			foreach(var file in files)
+			foreach(var method in methodList)
 			{
-				var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(file.FullName);
-				var formula = formulaDataStore.FormulaData.Find(x => x.name == fileNameWithoutExtension);
-				var methodInfo = Utils.GetFormulaMethod(fileNameWithoutExtension);
-
 				//Process only if valid method was found
-				if(methodInfo != null)
+				if(method != null)
 				{
+					var formulaName = method.DeclaringType.Name;
+					var formula = formulaDataStore.FormulaData.Find(x => x.name == formulaName);
 					//If formula doesn't exist in formulaDataStore
 					if(formula == null)
 					{
 						formula = new FormulaData();
-						formula.name = fileNameWithoutExtension;
-						formula.projectFilePath = Constants.formulasFolderUnityPath + file.Name;
+						formula.name = formulaName;
+						formula.projectFilePath = Constants.formulasFolderUnityPath + formulaName + ".cs";
 						formulaDataStore.FormulaData.Add(formula);
 						EditorUtility.SetDirty(formulaDataStore);
 					}
+					//Always write these values, even if formula already exists
 					formula.localFileExists = new FileInfo(Utils.GetFullPathFromAssetsPath(formula.projectFilePath)).Exists;
-					formula.methodInfo = methodInfo;
+					formula.methodInfo = method;
+					var formulaAttribute = Utils.GetFormulaAttributeForMethodInfo(method);
+					if(formulaAttribute != null)
+					{
+						formula.niceName = formulaAttribute.name;
+						formula.tooltip = formulaAttribute.tooltip;
+						formula.author = formulaAttribute.author;
+					}
 				}
 			}
 
@@ -292,7 +295,6 @@ namespace EditorFormulas
 
 		void DrawUsableFormula(FormulaData formula)
 		{
-			var niceName = ObjectNames.NicifyVariableName(formula.name);
 			var method = formula.methodInfo;
 
 			if(method == null)
@@ -324,7 +326,7 @@ namespace EditorFormulas
 
 			//Commented out for now, not sure if necessary - Button is only enabled if parameters have been initialized
 //			GUI.enabled = parameters.Length == 0 || parameterValuesArray.All(x => x != null);
-			if(GUILayout.Button(new GUIContent(niceName, niceName), GUILayout.Width(formulaButtonWidth)))
+			if(GUILayout.Button(new GUIContent(formula.niceName, formula.tooltip), GUILayout.Width(formulaButtonWidth)))
 			{
 				method.Invoke(null, parameterValuesArray);
 			}

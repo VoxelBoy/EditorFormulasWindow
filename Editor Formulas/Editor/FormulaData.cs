@@ -6,8 +6,11 @@ namespace EditorFormulas
 	[System.Serializable]
 	public class FormulaData
 	{
-		//Should match method info name
+		//Should match class name
 		public string name;
+		public string niceName;
+		public string tooltip;
+		public string author;
 		public string downloadURL;
 		public string htmlURL;
 		public string apiURL;

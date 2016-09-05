@@ -8,7 +8,6 @@ namespace EditorFormulas
 		public string tooltip;
 		public string author;
 
-
 		public FormulaAttribute()
 		{}
 
