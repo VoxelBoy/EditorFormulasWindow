@@ -26,7 +26,9 @@ Click on the dropdown at the top-right of the window to bring up the options men
 <img width="522" alt="Window Options" src="https://cloud.githubusercontent.com/assets/433535/18251452/d82aa952-7391-11e6-895f-366b5f870e93.png">
 
 Debug Mode toggle enables the window to push a variety of log messages to the console which can be useful to see what went wrong if an operation fails.
+
 Show Hidden Formulas toggle allows you to show or hide the formulas you've chosen to hide.
+
 Show Online Formulas toggle allows you to show or hide formulas you haven't downloaded yet.
 
 ### Submitting Formulas
