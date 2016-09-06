@@ -26,28 +26,6 @@ namespace EditorFormulas
 			return null;
 		}
 
-		public static MethodInfo[] GetAllFormulaMethods()
-		{
-			var editorFormulasType = Utils.GetTypeFromAssembly("EditorFormulas.Formulas", "Assembly-CSharp-Editor");
-			if(editorFormulasType == null)
-			{
-				return new MethodInfo[]{};
-			}
-			var methods = editorFormulasType.GetMethods(BindingFlags.Static | BindingFlags.Public);
-			return methods;
-		}
-
-		public static MethodInfo GetFormulaMethod(string name)
-		{
-			var editorFormulasType = Utils.GetTypeFromAssembly("EditorFormulas.Formulas", "Assembly-CSharp-Editor");
-			if(editorFormulasType == null)
-			{
-				return null;
-			}
-			var method = editorFormulasType.GetMethod(name, BindingFlags.Static | BindingFlags.Public);
-			return method;
-		}
-
 		public static MethodInfo[] GetAllFormulaMethodsWithAttribute()
 		{
 			var assembly = System.AppDomain.CurrentDomain.GetAssemblies().First(x => x.FullName.StartsWith("Assembly-CSharp-Editor"));

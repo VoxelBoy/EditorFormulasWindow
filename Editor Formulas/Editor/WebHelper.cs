@@ -225,6 +225,7 @@ namespace EditorFormulas
 					{
 						DebugLog ("Status code OK");
 						//If it was an update check
+						//Status code is OK, so we know there is an update since we use the IfModifiedSince header
 						if (downloadFormulaAction.isUpdateCheck)
 						{
 							DebugLog ("It was an update check, and there's an update");
